@@ -1,3 +1,9 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="把每天的待辦丟進艾森豪四象限，做完一件就在對應顏色的方塊上填一格。">
 <title>象限方塊</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -117,11 +123,49 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 .task .del:hover{color:var(--q1)}
 .gempty{color:var(--ink-3);font-size:12.5px;padding:4px 6px}
 
+/* 換象限：每列右邊的小色塊 → 點開四選一 */
+.task .mv{border:none;background:none;padding:4px;cursor:pointer;border-radius:6px;flex:none;
+  display:grid;place-items:center;opacity:.45;transition:opacity .15s,background .15s}
+.task:hover .mv,.task .mv[aria-expanded="true"],.task .mv:focus-visible{opacity:1}
+.task .mv:hover{background:var(--surface-2)}
+.task .mv i{display:block;width:12px;height:12px;border-radius:3px;background:var(--qc);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
+.mvbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:0 6px 11px 34px}
+.mvbar .lbl{font-size:11.5px;color:var(--ink-3)}
+.mvbar button{display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  font:500 12.5px/1 inherit;color:var(--ink-2);background:var(--surface);
+  border:1px solid var(--line);border-radius:99px;padding:7px 11px;transition:color .15s,border-color .15s}
+.mvbar button:hover{color:var(--ink);border-color:var(--qc)}
+.mvbar button .sw{width:9px;height:9px;border-radius:3px;background:var(--qc);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
+.mvbar .cancel{color:var(--ink-3);border-style:dashed}
+
+.tools{display:flex;justify-content:center;gap:8px;margin-top:26px}
+.tools button{border:1px solid var(--line);background:var(--surface);color:var(--ink-3);
+  border-radius:8px;padding:7px 13px;font:400 12.5px/1 inherit;cursor:pointer}
+.tools button:hover{color:var(--ink-2);border-color:var(--ink-3)}
+.tools .msg{font-size:11.5px;color:var(--ink-3);align-self:center}
+.iopanel{margin-top:11px;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;padding:12px}
+.iopanel textarea{width:100%;resize:vertical;background:var(--surface-2);color:var(--ink-2);
+  border:1px solid var(--line);border-radius:8px;padding:9px 10px;
+  font:400 11.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.iopanel textarea:focus{outline:none;border-color:var(--accent)}
+.iorow{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:9px;flex-wrap:wrap}
+.iohint{font-size:11.5px;color:var(--ink-3);flex:1;min-width:150px}
+.iobtns{display:flex;gap:7px}
+.iopanel button{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  border-radius:8px;padding:7px 13px;font:400 12.5px/1 inherit;cursor:pointer}
+.iopanel button:hover{color:var(--ink);border-color:var(--ink-3)}
+#ioAct{background:var(--ink);color:var(--surface);border-color:var(--ink);font-weight:500}
+#ioAct:hover{opacity:.88;color:var(--surface)}
+
 footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;line-height:1.7}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (max-width:420px){.title{font-size:20px}.axis-y{display:none}}
 </style>
-
+</head>
+<body>
 <main>
   <header class="top">
     <div>
@@ -154,6 +198,23 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
 
   <section id="lists"></section>
 
+  <div class="tools">
+    <button id="expBtn">匯出</button>
+    <button id="impBtn">匯入</button>
+    <span class="msg" id="ioMsg"></span>
+  </div>
+
+  <div class="iopanel" id="ioPanel" hidden>
+    <textarea id="ioBox" spellcheck="false" rows="4"></textarea>
+    <div class="iorow">
+      <span class="iohint" id="ioHint"></span>
+      <span class="iobtns">
+        <button id="ioAct"></button>
+        <button id="ioClose">關閉</button>
+      </span>
+    </div>
+  </div>
+
   <footer>
     資料只存在你這台裝置的瀏覽器裡，離線也能用。<br>
     我的第一個 vibe-coding 網頁工具 · 用艾森豪矩陣做的完成度追蹤
@@ -174,6 +235,7 @@ const KEY = "quadblocks.v1";
 // ── 狀態：一個任務清單，就是全部真相 ──
 let state = load();
 let pickQ = 2;                 // 新增時預設落在「制定計劃」
+let moveId = null;             // 目前展開「換象限」選單的任務 id
 let lastOn = new Set();        // 記住上一輪哪些格亮了，只讓新亮的那格 pop
 
 function load(){
@@ -264,10 +326,37 @@ function renderLists(){
         cb.setAttribute("aria-label", (task.done?"取消完成：":"標記完成：")+task.text);
         cb.onchange=()=>{ task.done=cb.checked; save(); renderAll(); };
         const txt=document.createElement("div"); txt.className="txt"; txt.textContent=task.text;
+
+        // 換象限：點小色塊 → 展開四選一
+        const mv=document.createElement("button"); mv.className="mv"; mv.innerHTML="<i></i>";
+        mv.style.setProperty("--qc",QUADS[q].color);
+        mv.setAttribute("aria-expanded", moveId===task.id);
+        mv.setAttribute("aria-label","移動到其他象限："+task.text);
+        mv.title="移動到其他象限";
+        mv.onclick=()=>{ moveId = (moveId===task.id ? null : task.id); renderLists(); };
+
         const del=document.createElement("button"); del.className="del"; del.innerHTML="&times;";
         del.setAttribute("aria-label","刪除："+task.text);
-        del.onclick=()=>{ state.tasks=state.tasks.filter(x=>x.id!==task.id); save(); renderAll(); };
-        row.append(cb,txt,del); g.appendChild(row);
+        del.onclick=()=>{ state.tasks=state.tasks.filter(x=>x.id!==task.id); moveId=null; save(); renderAll(); };
+        row.append(cb,txt,mv,del); g.appendChild(row);
+
+        if(moveId===task.id){
+          const bar=document.createElement("div"); bar.className="mvbar";
+          const lbl=document.createElement("span"); lbl.className="lbl"; lbl.textContent="移到：";
+          bar.appendChild(lbl);
+          for(const tq of ORDER){
+            if(tq===q) continue;
+            const b=document.createElement("button");
+            b.style.setProperty("--qc",QUADS[tq].color);
+            b.innerHTML=`<span class="sw"></span>${QUADS[tq].name}`;
+            b.onclick=()=>{ task.q=tq; moveId=null; save(); renderAll(); };
+            bar.appendChild(b);
+          }
+          const cancel=document.createElement("button"); cancel.className="cancel"; cancel.textContent="取消";
+          cancel.onclick=()=>{ moveId=null; renderLists(); };
+          bar.appendChild(cancel);
+          g.appendChild(bar);
+        }
       }
     }
     wrap.appendChild(g);
@@ -296,5 +385,60 @@ rb.onclick=()=>{
   state.tasks=[]; lastOn=new Set(); save(); renderAll();
 };
 
+// 匯出／匯入：資料是你的。用純文字搬家，換一個網址也帶得走。
+const ioMsg=document.getElementById("ioMsg"), ioPanel=document.getElementById("ioPanel"),
+      ioBox=document.getElementById("ioBox"), ioHint=document.getElementById("ioHint"),
+      ioAct=document.getElementById("ioAct");
+let msgT=null, ioMode=null;
+function say(t){
+  ioMsg.textContent=t;
+  clearTimeout(msgT); msgT=setTimeout(()=>{ ioMsg.textContent=""; },4000);
+}
+function closeIO(){ ioPanel.hidden=true; ioMode=null; ioBox.value=""; }
+
+document.getElementById("expBtn").onclick=()=>{
+  ioMode="export"; ioPanel.hidden=false;
+  ioBox.readOnly=true;
+  ioBox.value=JSON.stringify(state);
+  ioHint.textContent="這段文字就是你的資料。複製起來，貼到另一個網址的「匯入」就搬過去了。";
+  ioAct.textContent="複製";
+  ioBox.focus(); ioBox.select();
+};
+document.getElementById("impBtn").onclick=()=>{
+  ioMode="import"; ioPanel.hidden=false;
+  ioBox.readOnly=false; ioBox.value="";
+  ioHint.textContent="把之前匯出的那段文字貼進來，會覆蓋目前的任務。";
+  ioAct.textContent="匯入";
+  ioBox.focus();
+};
+document.getElementById("ioClose").onclick=closeIO;
+
+ioAct.onclick=()=>{
+  if(ioMode==="export"){
+    ioBox.select();
+    let done=false;
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(ioBox.value).then(()=>say("已複製")).catch(()=>say("已選取，請按 ⌘/Ctrl + C"));
+        done=true;
+      }
+    }catch(e){}
+    if(!done) say("已選取，請按 ⌘/Ctrl + C");
+    return;
+  }
+  try{
+    const d=JSON.parse(ioBox.value.trim());
+    if(!d||!Array.isArray(d.tasks)) throw 0;
+    const clean=d.tasks
+      .filter(x=>x&&typeof x.text==="string"&&QUADS[x.q])
+      .map(x=>({id:x.id||uid(), text:String(x.text).slice(0,120), q:x.q, done:!!x.done}));
+    if(!clean.length) throw 0;
+    state={tasks:clean}; moveId=null; lastOn=new Set(); save(); renderAll();
+    closeIO(); say("已匯入 "+clean.length+" 件");
+  }catch(e){ say("這段文字讀不出來，請確認是完整複製的"); }
+};
+
 renderChips(); renderAll();
 </script>
+</body>
+</html>
