@@ -143,6 +143,25 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 .mvbar .cancel{color:var(--ink-3);border-style:dashed}
 
 .listhint{font-size:11.5px;color:var(--ink-3);text-align:center;margin:22px 0 -4px}
+
+/* 換日提示 */
+.daybar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--q2);
+  border-radius:12px;padding:11px 14px;margin-bottom:16px;font-size:13px;color:var(--ink-2);
+  box-shadow:var(--shadow)}
+.daybar[hidden]{display:none}
+.daybar b{color:var(--ink);font-weight:600}
+.daybtns{display:flex;gap:7px;flex:none}
+.daybar button{border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);
+  border-radius:8px;padding:6px 11px;font:400 12px/1 inherit;cursor:pointer;white-space:nowrap}
+.daybar button:hover{color:var(--ink);border-color:var(--ink-3)}
+
+/* 拖曳 */
+.task{cursor:grab}
+.task:active{cursor:grabbing}
+.task.dragging{opacity:.35}
+.group.dropok{background:var(--surface-2);box-shadow:inset 0 0 0 2px var(--qc);border-radius:12px}
+.cell.dropok{outline:2px dashed var(--qc);outline-offset:-4px}
 .tools{display:flex;justify-content:center;gap:8px;margin-top:26px}
 .tools button{border:1px solid var(--line);background:var(--surface);color:var(--ink-3);
   border-radius:8px;padding:7px 13px;font:400 12.5px/1 inherit;cursor:pointer}
@@ -177,6 +196,14 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
     </div>
     <button class="reset mono" id="reset">新的一天</button>
   </header>
+
+  <div class="daybar" id="dayBar" hidden>
+    <span id="dayMsg"></span>
+    <span class="daybtns">
+      <button id="dayClear">連未完成也清掉</button>
+      <button id="dayOk">知道了</button>
+    </span>
+  </div>
 
   <section class="stage">
     <div class="axis-x"><span>◀ 不緊急</span><span>緊急 ▶</span></div>
@@ -240,6 +267,7 @@ const KEY = "quadblocks.v1";
 let state = load();
 let pickQ = 2;                 // 新增時預設落在「制定計劃」
 let moveId = null;             // 目前展開「換象限」選單的任務 id
+let dragId = null;             // 正在被拖曳的任務 id
 let lastOn = new Set();        // 記住上一輪哪些格亮了，只讓新亮的那格 pop
 
 function load(){
@@ -267,6 +295,54 @@ function rankInQuad(r,c){         // 該格在象限內的填入順序：先下�
   return bottom ? lc : 2+lc;      // 下排 0/1，上排 2/3
 }
 
+// ── 換象限：點選單或拖曳，最後都走這一個函式 ──
+function moveTask(id, q){
+  const t = state.tasks.find(x=>x.id===id);
+  if(!t || t.q===q) return false;
+  t.q = q; moveId = null; save(); renderAll();
+  return true;
+}
+function clearHint(){
+  document.querySelectorAll(".cell.dropok,.group.dropok").forEach(el=>el.classList.remove("dropok"));
+}
+function hintQuad(q){            // 拖到盤面時，把整個象限（4 格）框起來
+  clearHint();
+  document.querySelectorAll('#board .cell[data-q="'+q+'"]').forEach(el=>el.classList.add("dropok"));
+}
+function dropOn(ev, q){
+  clearHint();
+  let id = dragId;
+  try{ id = id || ev.dataTransfer.getData("text/plain"); }catch(e){}
+  dragId = null;
+  if(id) moveTask(id, q);
+}
+document.addEventListener("dragend", clearHint);
+
+// ── 換日：隔天自己開新的一天，做完的收起來、沒做完的留著 ──
+function todayStr(){
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function rollDay(){
+  const today = todayStr();
+  if(!state.day){ state.day = today; save(); return; }
+  if(state.day === today) return;
+  const done = state.tasks.filter(x=>x.done).length;
+  const left = state.tasks.filter(x=>!x.done).length;
+  state.tasks = state.tasks.filter(x=>!x.done);
+  state.day = today; moveId=null; lastOn=new Set(); save();
+  if(done || left) showDayBar(done, left); else hideDayBar();
+}
+function showDayBar(done, left){
+  const bar=document.getElementById("dayBar");
+  document.getElementById("dayMsg").innerHTML =
+    "新的一天 · 昨天完成的 <b>"+done+"</b> 件已收起"+
+    (left ? "，還沒做完的 <b>"+left+"</b> 件留下來了" : "");
+  document.getElementById("dayClear").hidden = !left;
+  bar.hidden = false;
+}
+function hideDayBar(){ document.getElementById("dayBar").hidden = true; }
+
 function renderBoard(){
   const board = document.getElementById("board");
   board.innerHTML = "";
@@ -277,6 +353,10 @@ function renderBoard(){
     const cell = document.createElement("div");
     cell.className = "cell" + (on?" on":"");
     cell.style.setProperty("--qc", QUADS[q].color);
+    cell.dataset.q = q;
+    // 也可以直接把任務拖到盤面上的那一區
+    cell.addEventListener("dragover", ev=>{ ev.preventDefault(); ev.dataTransfer.dropEffect="move"; hintQuad(q); });
+    cell.addEventListener("drop", ev=>{ ev.preventDefault(); dropOn(ev, q); });
     const id = r+"-"+c;
     if(on){ nowOn.add(id); if(!lastOn.has(id)) cell.classList.add("pop"); }
     // 每象限左上那格放一個小標，讓人一眼知道哪區是哪象限
@@ -316,6 +396,11 @@ function renderLists(){
     const t = state.tasks.filter(x=>x.q===q);
     const done = t.filter(x=>x.done).length;
     const g=document.createElement("div"); g.className="group";
+    g.dataset.q=q; g.style.setProperty("--qc",QUADS[q].color);
+    g.addEventListener("dragover", ev=>{ ev.preventDefault(); ev.dataTransfer.dropEffect="move";
+      clearHint(); g.classList.add("dropok"); });
+    g.addEventListener("dragleave", ()=>g.classList.remove("dropok"));
+    g.addEventListener("drop", ev=>{ ev.preventDefault(); dropOn(ev, q); });
     g.innerHTML =
       `<div class="ghead"><span class="dot" style="--qc:${QUADS[q].color}"></span>`+
       `<span class="gname">${QUADS[q].name}</span><span class="gstrat">${QUADS[q].strat}</span>`+
@@ -325,6 +410,14 @@ function renderLists(){
     }else{
       for(const task of t){
         const row=document.createElement("div"); row.className="task"+(task.done?" done":"");
+        row.draggable=true;
+        row.title="點名稱可換象限，也可以直接拖到別區";
+        row.addEventListener("dragstart", ev=>{
+          dragId=task.id; row.classList.add("dragging");
+          ev.dataTransfer.effectAllowed="move";
+          try{ ev.dataTransfer.setData("text/plain", task.id); }catch(e){}
+        });
+        row.addEventListener("dragend", ()=>{ dragId=null; row.classList.remove("dragging"); clearHint(); });
         const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=task.done;
         cb.style.setProperty("--qc",QUADS[q].color);
         cb.setAttribute("aria-label", (task.done?"取消完成：":"標記完成：")+task.text);
@@ -391,8 +484,21 @@ rb.onclick=()=>{
   if(!armed){ armed=true; rb.classList.add("confirm"); rb.textContent="確定清空？";
     armT=setTimeout(()=>{ armed=false; rb.classList.remove("confirm"); rb.textContent="新的一天"; },3000); return; }
   clearTimeout(armT); armed=false; rb.classList.remove("confirm"); rb.textContent="新的一天";
-  state.tasks=[]; lastOn=new Set(); save(); renderAll();
+  state.tasks=[]; state.day=todayStr(); moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
 };
+
+// 換日提示條上的兩顆鈕
+document.getElementById("dayOk").onclick = hideDayBar;
+document.getElementById("dayClear").onclick = ()=>{
+  state.tasks=[]; moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
+};
+// 頁面放著過夜、或從別的分頁切回來時，也檢查一次日期
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden) return;
+  const before = state.day;
+  rollDay();
+  if(before !== state.day) renderAll();
+});
 
 // 匯出／匯入：資料是你的。用純文字搬家，換一個網址也帶得走。
 const ioMsg=document.getElementById("ioMsg"), ioPanel=document.getElementById("ioPanel"),
@@ -442,11 +548,12 @@ ioAct.onclick=()=>{
       .filter(x=>x&&typeof x.text==="string"&&QUADS[x.q])
       .map(x=>({id:x.id||uid(), text:String(x.text).slice(0,120), q:x.q, done:!!x.done}));
     if(!clean.length) throw 0;
-    state={tasks:clean}; moveId=null; lastOn=new Set(); save(); renderAll();
-    closeIO(); say("已匯入 "+clean.length+" 件");
+    state={tasks:clean, day:todayStr()}; moveId=null; lastOn=new Set(); save(); renderAll();
+    closeIO(); hideDayBar(); say("已匯入 "+clean.length+" 件");
   }catch(e){ say("這段文字讀不出來，請確認是完整複製的"); }
 };
 
+rollDay();
 renderChips(); renderAll();
 </script>
 </body>
