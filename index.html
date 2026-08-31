@@ -115,7 +115,10 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 .task input:checked::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;
   border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
 .task input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.task .txt{flex:1;font-size:15px;word-break:break-word}
+.task .txt{flex:1;font:inherit;font-size:15px;word-break:break-word;text-align:left;
+  background:none;border:none;padding:3px 6px;margin:-3px -6px;border-radius:7px;
+  color:inherit;cursor:pointer;transition:background .15s}
+.task .txt:hover{background:var(--surface-2)}
 .task.done .txt{color:var(--ink-3);text-decoration:line-through}
 .task .del{border:none;background:none;color:var(--ink-3);cursor:pointer;font-size:16px;line-height:1;
   padding:2px 4px;opacity:0;transition:opacity .15s,color .15s}
@@ -125,8 +128,7 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 
 /* 換象限：每列右邊的小色塊 → 點開四選一 */
 .task .mv{border:none;background:none;padding:4px;cursor:pointer;border-radius:6px;flex:none;
-  display:grid;place-items:center;opacity:.45;transition:opacity .15s,background .15s}
-.task:hover .mv,.task .mv[aria-expanded="true"],.task .mv:focus-visible{opacity:1}
+  display:grid;place-items:center;opacity:1;transition:background .15s}
 .task .mv:hover{background:var(--surface-2)}
 .task .mv i{display:block;width:12px;height:12px;border-radius:3px;background:var(--qc);
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
@@ -140,6 +142,7 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
 .mvbar .cancel{color:var(--ink-3);border-style:dashed}
 
+.listhint{font-size:11.5px;color:var(--ink-3);text-align:center;margin:22px 0 -4px}
 .tools{display:flex;justify-content:center;gap:8px;margin-top:26px}
 .tools button{border:1px solid var(--line);background:var(--surface);color:var(--ink-3);
   border-radius:8px;padding:7px 13px;font:400 12.5px/1 inherit;cursor:pointer}
@@ -196,6 +199,7 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
     <div class="chips" id="chips"></div>
   </section>
 
+  <p class="listhint">打勾＝完成 · 點任務名稱可以換到其他象限</p>
   <section id="lists"></section>
 
   <div class="tools">
@@ -325,15 +329,20 @@ function renderLists(){
         cb.style.setProperty("--qc",QUADS[q].color);
         cb.setAttribute("aria-label", (task.done?"取消完成：":"標記完成：")+task.text);
         cb.onchange=()=>{ task.done=cb.checked; save(); renderAll(); };
-        const txt=document.createElement("div"); txt.className="txt"; txt.textContent=task.text;
+        // 換象限：點任務文字（或右邊小色塊）→ 展開四選一
+        const toggle=()=>{ moveId = (moveId===task.id ? null : task.id); renderLists(); };
 
-        // 換象限：點小色塊 → 展開四選一
+        const txt=document.createElement("button"); txt.className="txt"; txt.textContent=task.text;
+        txt.setAttribute("aria-expanded", moveId===task.id);
+        txt.title="點一下可換象限";
+        txt.onclick=toggle;
+
         const mv=document.createElement("button"); mv.className="mv"; mv.innerHTML="<i></i>";
         mv.style.setProperty("--qc",QUADS[q].color);
         mv.setAttribute("aria-expanded", moveId===task.id);
         mv.setAttribute("aria-label","移動到其他象限："+task.text);
         mv.title="移動到其他象限";
-        mv.onclick=()=>{ moveId = (moveId===task.id ? null : task.id); renderLists(); };
+        mv.onclick=toggle;
 
         const del=document.createElement("button"); del.className="del"; del.innerHTML="&times;";
         del.setAttribute("aria-label","刪除："+task.text);
