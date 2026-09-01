@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="把每天的待辦丟進艾森豪四象限，做完一件就在對應顏色的方塊上填一格。">
+<meta name="description" content="把每天的待辦丟進四象限，做完一件就在對應顏色的方塊上填一格。">
 <title>象限方塊</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2215%22%20fill%3D%22%23F4F6FA%22%2F%3E%3Crect%20x%3D%229%22%20y%3D%229%22%20width%3D%2221%22%20height%3D%2221%22%20rx%3D%224.5%22%20fill%3D%22%23E5484D%22%2F%3E%3Crect%20x%3D%2234%22%20y%3D%229%22%20width%3D%2221%22%20height%3D%2221%22%20rx%3D%224.5%22%20fill%3D%22%233B6FF0%22%2F%3E%3Crect%20x%3D%229%22%20y%3D%2234%22%20width%3D%2221%22%20height%3D%2221%22%20rx%3D%224.5%22%20fill%3D%22%23E7A413%22%2F%3E%3Crect%20x%3D%2234%22%20y%3D%2234%22%20width%3D%2221%22%20height%3D%2221%22%20rx%3D%224.5%22%20fill%3D%22%2327A567%22%2F%3E%3C%2Fsvg%3E">
 <meta name="theme-color" content="#EDEFF3">
@@ -254,6 +254,40 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 /* ── 年度回顧 ─────────────────────────────────────────────
    顏色刻意不用四象限那四色：那四個顏色在這個工具裡是「策略」的語彙，
    年度格子講的是「量」，混用會讓人誤讀。所以用單一墨色的深淺。 */
+/* ── 桌面浮窗：收合模式只留盤面 ─────────────────────────────
+   同一份程式碼，網頁跟桌面共用；桌面外殼只負責視窗大小和永遠置頂。 */
+.orbctl{position:fixed;top:7px;right:8px;display:flex;gap:5px;z-index:60}
+.orbctl[hidden]{display:none}
+.orbctl button{width:23px;height:23px;padding:0;line-height:1;font-size:11px;cursor:pointer;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-3);border-radius:7px;
+  transition:color .15s,border-color .15s}
+.orbctl button:hover{color:var(--ink);border-color:var(--ink-3)}
+
+body.compact main{max-width:none;padding:11px 11px 9px}
+body.compact header.top,
+body.compact .week,
+body.compact .weekfoot,
+body.compact .daybar,
+body.compact .add,
+body.compact .calpanel,
+body.compact .listhint,
+body.compact #lists,
+body.compact .yearbox,
+body.compact .tools,
+body.compact .iopanel,
+body.compact footer{display:none}
+body.compact .stage{padding:11px;border-radius:13px;margin-bottom:7px}
+body.compact .axis-x,body.compact .axis-y,body.compact .qtag{display:none}
+body.compact .board{gap:4px}
+body.compact .summary{margin:0 2px;font-size:11.5px;gap:8px}
+body.compact .bar{height:5px}
+
+/* 在桌面外殼裡：收合時整塊可拖曳，展開時拖標題列 */
+body.shell.compact .stage{-webkit-app-region:drag}
+body.shell:not(.compact) header.top{-webkit-app-region:drag}
+body.shell:not(.compact) header.top .reset,
+body.shell .orbctl{-webkit-app-region:no-drag}
+
 .yearbox{margin-top:30px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
   box-shadow:var(--shadow);overflow:hidden}
 .yearbox summary{list-style:none;cursor:pointer;padding:13px 16px;font-size:13px;color:var(--ink-2);
@@ -433,6 +467,11 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
       </div>
     </div>
   </details>
+
+  <div class="orbctl" id="orbCtl" hidden>
+    <button id="orbToggle" title="展開／收合">⤢</button>
+    <button id="orbQuit" title="關閉視窗">✕</button>
+  </div>
 
   <div class="tools">
     <button id="expBtn">匯出</button>
@@ -1127,6 +1166,32 @@ document.getElementById("calRead").onclick=()=>{
       '<div class="calfoot"><span class="calmsg">沒有讀到行程，一行一件試試看</span></div>';
   }
 };
+
+/* ── 桌面外殼（有的話） ────────────────────────────────────
+   window.orbShell 由 Electron 的 preload 注入；在瀏覽器裡不存在，
+   所以同一份檔案在網頁上完全照舊，不會多出任何東西。 */
+const shell = (typeof window !== "undefined" && window.orbShell) ? window.orbShell : null;
+function applyMode(){
+  const c = location.hash === "#compact";
+  document.body.classList.toggle("compact", c);
+  const t = document.getElementById("orbToggle");
+  if(t) t.textContent = c ? "⤢" : "⤡";
+  if(shell) shell.setMode(c ? "compact" : "full");
+}
+if(shell){
+  document.body.classList.add("shell");
+  document.getElementById("orbCtl").hidden = false;
+  document.getElementById("orbToggle").onclick = ()=>{
+    location.hash = (location.hash === "#compact") ? "#full" : "#compact";
+    applyMode();
+  };
+  document.getElementById("orbQuit").onclick = ()=> shell.quit();
+  document.querySelector(".stage").addEventListener("click", ()=>{   // 收合時點盤面就展開
+    if(document.body.classList.contains("compact")){ location.hash="#full"; applyMode(); }
+  });
+}
+window.addEventListener("hashchange", applyMode);
+applyMode();
 
 selDay = todayStr();
 rollDays();
