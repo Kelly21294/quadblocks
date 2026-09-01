@@ -49,6 +49,34 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 .reset:hover{color:var(--ink);border-color:var(--ink-3)}
 .reset.confirm{color:var(--q1);border-color:var(--q1)}
 
+/* ── 週曆列 ───────────────────────────────────────────────── */
+.week{display:flex;align-items:stretch;gap:6px;margin-bottom:8px}
+.wnav{flex:none;width:26px;border:1px solid var(--line);background:var(--surface);color:var(--ink-3);
+  border-radius:9px;cursor:pointer;font-size:14px;line-height:1;transition:color .15s,border-color .15s}
+.wnav:hover{color:var(--ink);border-color:var(--ink-3)}
+.wdays{flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.wday{border:1px solid var(--line);background:var(--surface);border-radius:10px;cursor:pointer;
+  padding:7px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:border-color .15s,background .15s;min-width:0}
+.wday:hover{border-color:var(--ink-3)}
+.wday .wd{font-size:10.5px;color:var(--ink-3);line-height:1}
+.wday .dt{font:600 14px/1 "IBM Plex Mono",ui-monospace,monospace;color:var(--ink-2)}
+.wday .pip{height:3px;width:16px;border-radius:99px;background:var(--cell-empty);overflow:hidden}
+.wday .pip span{display:block;height:100%;background:var(--ink-3);width:0}
+.wday.today .dt{color:var(--accent)}
+.wday.today .wd{color:var(--accent)}
+.wday[aria-pressed="true"]{border-color:var(--ink);background:var(--surface-2)}
+.wday[aria-pressed="true"] .dt{color:var(--ink)}
+.wday.past{opacity:.55}
+.wday:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.weekfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:0 2px 14px;min-height:20px}
+.wlabel{font-size:12px;color:var(--ink-3)}
+.wtoday{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  border-radius:8px;padding:5px 10px;font-size:11.5px;cursor:pointer}
+.wtoday:hover{color:var(--ink);border-color:var(--ink-3)}
+.wtoday[hidden]{display:none}
+
 /* ── 盤面 ─────────────────────────────────────────────────── */
 .stage{background:var(--surface);border:1px solid var(--line);border-radius:16px;
   box-shadow:var(--shadow);padding:20px;margin-bottom:14px}
@@ -294,9 +322,9 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
   <header class="top">
     <div>
       <div class="title">象限方塊</div>
-      <div class="subtitle">睡前把明天的事丟進四象限 · 做完一件就填一塊</div>
+      <div class="subtitle">選一天，把事情丟進四象限 · 做完一件就填一塊</div>
     </div>
-    <button class="reset mono" id="reset">新的一天</button>
+    <button class="reset mono" id="reset">清空今天</button>
   </header>
 
   <div class="daybar" id="dayBar" hidden>
@@ -305,6 +333,16 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
       <button id="dayClear">連未完成也清掉</button>
       <button id="dayOk">知道了</button>
     </span>
+  </div>
+
+  <nav class="week" aria-label="選擇日期">
+    <button class="wnav" id="wPrev" aria-label="上一週">‹</button>
+    <div class="wdays" id="wDays"></div>
+    <button class="wnav" id="wNext" aria-label="下一週">›</button>
+  </nav>
+  <div class="weekfoot">
+    <span class="wlabel" id="wLabel"></span>
+    <button class="wtoday" id="wToday" hidden>回到今天</button>
   </div>
 
   <section class="stage">
@@ -322,7 +360,7 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
 
   <section class="add">
     <div class="add-row">
-      <input id="taskInput" type="text" placeholder="明天要做的一件事…" maxlength="120" autocomplete="off">
+      <input id="taskInput" type="text" placeholder="今天要做的一件事…" maxlength="120" autocomplete="off">
       <button class="go" id="addBtn">加入</button>
     </div>
     <div class="chips" id="chips"></div>
@@ -432,10 +470,21 @@ let state = load();
 let pickQ = 2;                 // 新增時預設落在「制定計劃」
 let moveId = null;             // 目前展開「換象限」選單的任務 id
 let dragId = null;             // 正在被拖曳的任務 id
+let selDay = "";               // 目前正在看／編輯哪一天（YYYY-MM-DD）
 let lastOn = new Set();        // 記住上一輪哪些格亮了，只讓新亮的那格 pop
 
 function load(){
-  try{ const d = JSON.parse(localStorage.getItem(KEY)); if(d && Array.isArray(d.tasks)) return d; }catch(e){}
+  try{
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if(d && Array.isArray(d.tasks)){
+      // 舊版的任務沒有「屬於哪一天」，用它原本的 day 或今天補上，資料才不會變孤兒
+      const n = new Date();
+      const fb = d.day || (n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0")+
+                           "-"+String(n.getDate()).padStart(2,"0"));
+      d.tasks.forEach(t => { if(t && !t.d) t.d = fb; });
+      return d;
+    }
+  }catch(e){}
   return { tasks:[] };
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
@@ -443,9 +492,12 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6
 const esc = s => String(s).replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
+// 一天的任務。整個畫面都只看「選到的那一天」，不再假設就是今天。
+const dayTasks = d => state.tasks.filter(t => t.d === (d || selDay));
+
 // 每象限完成度 → 幾格（0..4）：有進度至少 1 格，全做完才滿 4 格
 function filledOf(q){
-  const t = state.tasks.filter(x=>x.q===q);
+  const t = dayTasks().filter(x=>x.q===q);
   const total = t.length, done = t.filter(x=>x.done).length;
   if(total===0) return 0;
   if(done===total) return 4;
@@ -488,38 +540,42 @@ document.addEventListener("dragend", clearHint);
 const dstr = d =>
   d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 function todayStr(){ return dstr(new Date()); }
-// 換日前先把當天的結果存成一筆歷史。歷史沒辦法事後補，所以多存一點：
+// 把某一天的結果存成一筆歷史。歷史沒辦法事後補，所以多存一點：
 // 畫面現在只用到完成數，但四個象限的分佈一起留著，之後想看「力氣花在哪」才有料。
-function archiveDay(){
-  const total = state.tasks.length;
-  if(!total || !state.day) return;
-  const done = state.tasks.filter(x=>x.done).length;
+function archiveDate(d, ts){
+  if(!d || !ts || !ts.length) return;
+  const done = ts.filter(x=>x.done).length;
   const q = ORDER.map(qq=>{
-    const t = state.tasks.filter(x=>x.q===qq);
-    return [t.length, t.filter(x=>x.done).length];
+    const s = ts.filter(x=>x.q===qq);
+    return [s.length, s.filter(x=>x.done).length];
   });
-  state.history = (state.history || []).filter(h => h && h.d !== state.day);
-  state.history.push({ d: state.day, t: total, c: done, q });
+  state.history = (state.history || []).filter(h => h && h.d !== d);
+  state.history.push({ d, t: ts.length, c: done, q });
   state.history.sort((a,b)=> a.d < b.d ? -1 : 1);
   if(state.history.length > 800) state.history = state.history.slice(-800);
 }
 
-function rollDay(){
+// 已經過去的日子：結果歸檔、做完的收起來、沒做完的移到今天（不然會被留在過去，看不到）
+function rollDays(){
   const today = todayStr();
-  if(!state.day){ state.day = today; save(); return; }
-  if(state.day === today) return;
-  const done = state.tasks.filter(x=>x.done).length;
-  const left = state.tasks.filter(x=>!x.done).length;
-  archiveDay();
-  state.tasks = state.tasks.filter(x=>!x.done);
-  state.day = today; moveId=null; lastOn=new Set(); save();
-  if(done || left) showDayBar(done, left); else hideDayBar();
+  const past = [...new Set(state.tasks.map(t=>t.d).filter(d => d && d < today))].sort();
+  if(!past.length){ state.lastSeen = today; save(); return; }
+  let doneN = 0;
+  for(const d of past){
+    const ts = state.tasks.filter(t=>t.d===d);
+    archiveDate(d, ts);
+    doneN += ts.filter(x=>x.done).length;
+  }
+  const carry = state.tasks.filter(t => t.d < today && !t.done).map(t => ({...t, d: today}));
+  state.tasks = state.tasks.filter(t => t.d >= today).concat(carry);
+  state.lastSeen = today; moveId=null; lastOn=new Set(); save();
+  if(doneN || carry.length) showDayBar(doneN, carry.length); else hideDayBar();
 }
 function showDayBar(done, left){
   const bar=document.getElementById("dayBar");
   document.getElementById("dayMsg").innerHTML =
-    "新的一天 · 昨天完成的 <b>"+done+"</b> 件已收起"+
-    (left ? "，還沒做完的 <b>"+left+"</b> 件留下來了" : "");
+    "新的一天 · 之前完成的 <b>"+done+"</b> 件已收起"+
+    (left ? "，還沒做完的 <b>"+left+"</b> 件移到今天" : "");
   document.getElementById("dayClear").hidden = !left;
   bar.hidden = false;
 }
@@ -551,12 +607,13 @@ function renderBoard(){
 }
 
 function renderSummary(){
-  const total = state.tasks.length, done = state.tasks.filter(x=>x.done).length;
+  const ts = dayTasks();
+  const total = ts.length, done = ts.filter(x=>x.done).length;
   const filled = ORDER.reduce((a,q)=>a+filledOf(q),0);
   const pct = Math.round(filled/16*100);
   document.getElementById("barFill").style.width = pct+"%";
   document.getElementById("summaryText").innerHTML = total===0
-    ? "今天還沒有任務"
+    ? (selDay===todayStr() ? "今天還沒有任務" : "這一天還沒有任務")
     : `完成 <b>${done}</b> / ${total} 件 · 盤面 <b>${pct}%</b>`;
 }
 
@@ -575,7 +632,7 @@ function renderChips(){
 function renderLists(){
   const wrap = document.getElementById("lists"); wrap.innerHTML="";
   for(const q of ORDER){
-    const t = state.tasks.filter(x=>x.q===q);
+    const t = dayTasks().filter(x=>x.q===q);
     const done = t.filter(x=>x.done).length;
     const g=document.createElement("div"); g.className="group";
     g.dataset.q=q; g.style.setProperty("--qc",QUADS[q].color);
@@ -666,8 +723,11 @@ function dayLevel(c,t){
 function yearMap(){
   const map={};
   (state.history||[]).forEach(h=>{ if(h&&h.d) map[h.d]={c:h.c||0,t:h.t||0}; });
-  if(state.tasks.length)                                   // 今天還沒歸檔，用現在的盤面
-    map[todayStr()]={c:state.tasks.filter(x=>x.done).length, t:state.tasks.length};
+  const byDay={};                                          // 還沒歸檔的日子，直接用現在的盤面
+  state.tasks.forEach(t=>{ if(t.d) (byDay[t.d]=byDay[t.d]||[]).push(t); });
+  Object.keys(byDay).forEach(d=>{
+    map[d]={ c: byDay[d].filter(x=>x.done).length, t: byDay[d].length };
+  });
   return map;
 }
 function renderYear(){
@@ -717,8 +777,51 @@ function renderYear(){
     : '<span class="yearempty">還沒有累積紀錄。從今天起，每次跨日都會自動存下當天的結果。</span>';
 }
 
+const WD = ["日","一","二","三","四","五","六"];
+function parseDay(k){ const [y,m,d]=k.split("-").map(Number); return new Date(y,m-1,d); }
+
+function renderWeek(){
+  const box=document.getElementById("wDays"); box.innerHTML="";
+  const today=todayStr();
+  const base=parseDay(selDay);
+  const start=new Date(base.getFullYear(), base.getMonth(), base.getDate()-base.getDay());
+  for(let i=0;i<7;i++){
+    const d=new Date(start.getFullYear(), start.getMonth(), start.getDate()+i);
+    const key=dstr(d), ts=dayTasks(key);
+    const done=ts.filter(x=>x.done).length;
+    const b=document.createElement("button");
+    b.className="wday"+(key===today?" today":"")+(key<today?" past":"");
+    b.setAttribute("aria-pressed", key===selDay);
+    b.setAttribute("aria-label", key+"，"+ts.length+" 件任務，完成 "+done+" 件");
+    b.title=key+(ts.length? "　"+done+" / "+ts.length : "　沒有任務");
+    b.innerHTML='<span class="wd">'+WD[d.getDay()]+'</span>'+
+      '<span class="dt">'+d.getDate()+'</span>'+
+      '<span class="pip"><span style="width:'+(ts.length?Math.round(done/ts.length*100):0)+'%"></span></span>';
+    b.onclick=()=>{ selDay=key; moveId=null; lastOn=new Set(); renderAll(); };
+    box.appendChild(b);
+  }
+  const d=parseDay(selDay), isToday=selDay===today;
+  document.getElementById("wLabel").textContent =
+    (d.getMonth()+1)+" / "+d.getDate()+"（"+WD[d.getDay()]+"）"+
+    (isToday ? " · 今天" : (selDay<today ? " · 已經過去" : " · 還沒到"));
+  document.getElementById("wToday").hidden = isToday;
+  const rb=document.getElementById("reset");
+  if(!rb.classList.contains("confirm")) rb.textContent = isToday ? "清空今天" : "清空這天";
+  // 提示文字跟著選到的日子走，才不會在排週四時還寫著「今天」
+  document.getElementById("taskInput").placeholder =
+    (isToday ? "今天" : (d.getMonth()+1)+"/"+d.getDate()) + "要做的一件事…";
+  document.getElementById("calBtn").nextElementSibling.textContent =
+    isToday ? "把當天的行程一次帶進來" : "把 "+(d.getMonth()+1)+"/"+d.getDate()+" 的行程一次帶進來";
+}
+
+function shiftWeek(n){
+  const d=parseDay(selDay);
+  d.setDate(d.getDate()+n*7);
+  selDay=dstr(d); moveId=null; lastOn=new Set(); renderAll();
+}
+
 function renderAll(){
-  renderBoard(); renderSummary(); renderLists();
+  renderWeek(); renderBoard(); renderSummary(); renderLists();
   const yb=document.getElementById("yearBox");
   if(yb && yb.open) renderYear();
 }
@@ -726,7 +829,7 @@ function renderAll(){
 function addTask(){
   const inp=document.getElementById("taskInput");
   const text=inp.value.trim(); if(!text) return;
-  state.tasks.push({ id:uid(), text, q:pickQ, done:false });
+  state.tasks.push({ id:uid(), text, q:pickQ, done:false, d:selDay });
   inp.value=""; save(); renderAll(); inp.focus();
 }
 
@@ -738,11 +841,16 @@ let armed=false, armT=null;
 const rb=document.getElementById("reset");
 rb.onclick=()=>{
   if(!armed){ armed=true; rb.classList.add("confirm"); rb.textContent="確定清空？";
-    armT=setTimeout(()=>{ armed=false; rb.classList.remove("confirm"); rb.textContent="新的一天"; },3000); return; }
-  clearTimeout(armT); armed=false; rb.classList.remove("confirm"); rb.textContent="新的一天";
-  archiveDay();                      // 手動收工也算一天，一樣留下紀錄
-  state.tasks=[]; state.day=todayStr(); moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
+    armT=setTimeout(()=>{ armed=false; rb.classList.remove("confirm"); renderWeek(); },3000); return; }
+  clearTimeout(armT); armed=false; rb.classList.remove("confirm");
+  archiveDate(selDay, dayTasks());   // 手動收工也算一天，一樣留下紀錄
+  state.tasks=state.tasks.filter(t=>t.d!==selDay);
+  moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
 };
+
+document.getElementById("wPrev").onclick=()=>shiftWeek(-1);
+document.getElementById("wNext").onclick=()=>shiftWeek(1);
+document.getElementById("wToday").onclick=()=>{ selDay=todayStr(); moveId=null; lastOn=new Set(); renderAll(); };
 
 document.getElementById("yearBox").addEventListener("toggle", function(){
   if(this.open) renderYear();
@@ -751,14 +859,16 @@ document.getElementById("yearBox").addEventListener("toggle", function(){
 // 換日提示條上的兩顆鈕
 document.getElementById("dayOk").onclick = hideDayBar;
 document.getElementById("dayClear").onclick = ()=>{
-  state.tasks=[]; moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
+  const today=todayStr();
+  state.tasks=state.tasks.filter(t=>t.d!==today);
+  moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
 };
 // 頁面放著過夜、或從別的分頁切回來時，也檢查一次日期
 document.addEventListener("visibilitychange", ()=>{
   if(document.hidden) return;
-  const before = state.day;
-  rollDay();
-  if(before !== state.day) renderAll();
+  const before = state.lastSeen;
+  rollDays();
+  if(before !== state.lastSeen){ selDay = todayStr(); renderAll(); }
 });
 
 // 匯出／匯入：資料是你的。用純文字搬家，換一個網址也帶得走。
@@ -807,13 +917,14 @@ ioAct.onclick=()=>{
     if(!d||!Array.isArray(d.tasks)) throw 0;
     const clean=d.tasks
       .filter(x=>x&&typeof x.text==="string"&&QUADS[x.q])
-      .map(x=>({id:x.id||uid(), text:String(x.text).slice(0,120), q:x.q, done:!!x.done}));
+      .map(x=>({id:x.id||uid(), text:String(x.text).slice(0,120), q:x.q, done:!!x.done,
+                d: (typeof x.d==="string" && /^\d{4}-\d{2}-\d{2}$/.test(x.d)) ? x.d : todayStr()}));
     if(!clean.length) throw 0;
     // 歷史紀錄補不回來，所以匯入時：檔案裡有就用檔案的，沒有就保留現有的，絕不清空
     const hist = Array.isArray(d.history)
       ? d.history.filter(h => h && typeof h.d === "string")
       : (state.history || []);
-    state={tasks:clean, day:todayStr(), history:hist};
+    state={tasks:clean, lastSeen:todayStr(), history:hist};
     moveId=null; lastOn=new Set(); save(); renderAll();
     closeIO(); hideDayBar(); say("已匯入 "+clean.length+" 件");
   }catch(e){ say("這段文字讀不出來，請確認是完整複製的"); }
@@ -890,10 +1001,9 @@ function gConnect(){
 
 async function gFetch(){
   if(!gToken){ gConnect(); return; }
-  gStatus("讀取今天的行程中…");
-  const now=new Date();
-  const from=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  const to=new Date(from.getTime()+86400000);
+  gStatus("讀取行程中…");
+  const from=parseDay(selDay);
+  const to=new Date(from.getFullYear(),from.getMonth(),from.getDate()+1);
   const url="https://www.googleapis.com/calendar/v3/calendars/primary/events"+
     "?singleEvents=true&orderBy=startTime&maxResults=50"+
     "&timeMin="+encodeURIComponent(from.toISOString())+
@@ -914,12 +1024,12 @@ async function gFetch(){
         title: String(ev.summary).trim().slice(0,120)
       }));
     renderCalResult(); gRefreshUI();
-    gStatus(calEvents.length ? "讀到今天 "+calEvents.length+" 件行程，勾要的再加入" : "今天沒有行程","ok");
+    gStatus(calEvents.length ? "讀到 "+calEvents.length+" 件行程，勾要的再加入" : "這一天沒有行程","ok");
   }catch(e){ gStatus("讀取失敗，請檢查網路或重新授權","bad"); }
 }
 
 // ② 一件行程 → 一個任務的識別鍵（同一天同名只會進來一次）
-const calKey = title => todayStr()+"|"+title;
+const calKey = title => selDay+"|"+title;
 
 function renderCalChips(){
   const box=document.getElementById("calChips"); box.innerHTML="";
@@ -965,7 +1075,7 @@ function importChecked(){
   for(const e of picked){
     const ck=calKey(e.title);
     if(state.tasks.some(t=>t.ck===ck)) continue;
-    state.tasks.push({ id:uid(), text:e.title, q:calQ, done:false, src:"cal", ck });
+    state.tasks.push({ id:uid(), text:e.title, q:calQ, done:false, src:"cal", ck, d:selDay });
     n++;
   }
   if(!n) return;
@@ -1014,7 +1124,8 @@ document.getElementById("calRead").onclick=()=>{
   }
 };
 
-rollDay();
+selDay = todayStr();
+rollDays();
 renderChips(); renderCalChips(); gRefreshUI(); renderAll();
 </script>
 </body>
