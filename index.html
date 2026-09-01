@@ -178,6 +178,30 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 
 .listhint{font-size:11.5px;color:var(--ink-3);text-align:center;margin:22px 0 -4px}
 
+/* 會議詢問 */
+.meetask{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--q2);
+  border-radius:12px;padding:14px 16px;margin-top:-10px;box-shadow:var(--shadow)}
+.meetask[hidden]{display:none}
+.meethead{margin:0 0 11px;font-size:13px;color:var(--ink-2)}
+.meethead b{color:var(--ink);font-weight:700}
+.meetrow{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.meetrow label{font-size:12.5px;color:var(--ink-3);display:flex;align-items:center;gap:7px}
+.meetrow input,.meetrow select{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);
+  border-radius:8px;padding:7px 9px;font:400 13px/1 inherit}
+.meetrow input:focus,.meetrow select:focus{outline:none;border-color:var(--accent)}
+.meetact{display:flex;justify-content:space-between;align-items:center;gap:11px;
+  margin-top:12px;flex-wrap:wrap}
+.meetmsg{font-size:12px;color:var(--ink-3);flex:1;min-width:120px}
+.meetbtns{display:flex;gap:8px}
+.meetask .go{border:none;background:var(--ink);color:var(--surface);border-radius:9px;
+  padding:8px 14px;font:600 13px/1 inherit;cursor:pointer}
+.meetask .go:hover{opacity:.9}
+.meetask .go:disabled{opacity:.4;cursor:not-allowed}
+.task .meetlink{font:500 10.5px/1 "IBM Plex Mono",ui-monospace,monospace;color:var(--q2);
+  border:1px solid var(--line);border-radius:4px;padding:3px 6px;margin-left:8px;
+  text-decoration:none;white-space:nowrap;flex:none;align-self:center}
+.task .meetlink:hover{border-color:var(--q2)}
+
 /* 行事曆匯入 */
 .calrow{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:12px;
   padding-top:12px;border-top:1px dashed var(--line)}
@@ -443,6 +467,28 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
       <button class="calbtn" id="calRead">讀取貼上的行程</button>
     </div>
     <div id="calResult"></div>
+  </section>
+
+  <section class="meetask" id="meetAsk" hidden>
+    <p class="meethead">這看起來是一場會議：<b id="meetName"></b></p>
+    <div class="meetrow">
+      <label>開始 <input type="time" id="meetTime" value="14:00"></label>
+      <label>時長
+        <select id="meetLen">
+          <option value="30">30 分鐘</option>
+          <option value="60" selected>1 小時</option>
+          <option value="90">1.5 小時</option>
+          <option value="120">2 小時</option>
+        </select>
+      </label>
+    </div>
+    <div class="meetact">
+      <span class="meetmsg" id="meetMsg"></span>
+      <span class="meetbtns">
+        <button class="calbtn" id="meetNo">不用</button>
+        <button class="go" id="meetGo">建立會議＋Meet 連結</button>
+      </span>
+    </div>
   </section>
 
   <p class="listhint">打勾＝完成 · 點任務名稱可以換到其他象限</p>
@@ -730,6 +776,13 @@ function renderLists(){
           tg.textContent="日曆"; tg.title="這件事是從行事曆匯入的";
           row.append(tg);
         }
+        if(task.meet){
+          const a=document.createElement("a"); a.className="meetlink";
+          a.href=task.meet; a.target="_blank"; a.rel="noopener";
+          a.textContent="Meet"; a.title="開啟會議連結";
+          a.onclick=e=>e.stopPropagation();
+          row.append(a);
+        }
         row.append(mv,del); g.appendChild(row);
 
         if(moveId===task.id){
@@ -874,8 +927,10 @@ function renderAll(){
 function addTask(){
   const inp=document.getElementById("taskInput");
   const text=inp.value.trim(); if(!text) return;
-  state.tasks.push({ id:uid(), text, q:pickQ, done:false, d:selDay });
+  const task = { id:uid(), text, q:pickQ, done:false, d:selDay };
+  state.tasks.push(task);
   inp.value=""; save(); renderAll(); inp.focus();
+  if(looksLikeMeeting(text)) askMeeting(task);
 }
 
 document.getElementById("addBtn").onclick=addTask;
@@ -999,7 +1054,7 @@ function parseCalText(text){
 // ① 取得行程（正式版：Google 日曆）
 // 只有這一段在跟 Google 說話。它最後一樣是產生 calEvents，②③完全不知道資料哪裡來的。
 const GKEY = "quadblocks.gcal";
-const GSCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GSCOPE = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events";
 let gToken = null, gClient = null;
 
 const gCfg  = () => { try{ return JSON.parse(localStorage.getItem(GKEY))||{}; }catch(e){ return {}; } };
@@ -1168,6 +1223,92 @@ document.getElementById("calRead").onclick=()=>{
       '<div class="calfoot"><span class="calmsg">沒有讀到行程，一行一件試試看</span></div>';
   }
 };
+
+/* ── 會議：偵測 → 詢問 → 建立 ──────────────────────────────
+   關鍵字只是「開口問」的觸發，不是自動建立。要不要建、幾點、多久，
+   永遠是使用者按下去才發生——工具可以主動提醒，但不該替人做決定。 */
+const MEET_WORDS = ["會議","訪談","面試","例會"];
+const looksLikeMeeting = t => MEET_WORDS.some(w => String(t).includes(w));
+let meetTaskId = null;
+
+function askMeeting(task){
+  meetTaskId = task.id;
+  document.getElementById("meetName").textContent = task.text;
+  let h = (task.d === todayStr()) ? new Date().getHours() + 1 : 10;
+  h = Math.min(Math.max(h, 8), 21);
+  document.getElementById("meetTime").value = String(h).padStart(2,"0")+":00";
+  document.getElementById("meetMsg").textContent = "";
+  document.getElementById("meetGo").disabled = false;
+  document.getElementById("meetAsk").hidden = false;
+}
+function closeMeet(){
+  document.getElementById("meetAsk").hidden = true;
+  meetTaskId = null;
+}
+const isoLocal = d =>
+  d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+
+  "T"+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")+":00";
+
+async function createMeeting(){
+  const task = state.tasks.find(t => t.id === meetTaskId);
+  const msg = document.getElementById("meetMsg");
+  if(!task) return closeMeet();
+  if(!gToken){
+    msg.textContent = "要先連結 Google 日曆（下面那個面板）";
+    document.getElementById("calPanel").hidden = false;
+    return;
+  }
+  const time = document.getElementById("meetTime").value || "14:00";
+  const len  = parseInt(document.getElementById("meetLen").value, 10) || 60;
+  const start = new Date(task.d + "T" + time + ":00");
+  if(isNaN(start)){ msg.textContent = "時間讀不出來，再確認一次"; return; }
+  const end = new Date(start.getTime() + len*60000);
+  let tz = "Asia/Taipei";
+  try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz; }catch(e){}
+
+  document.getElementById("meetGo").disabled = true;
+  msg.textContent = "建立中…";
+  try{
+    const r = await fetch(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
+      { method:"POST",
+        headers:{ Authorization:"Bearer "+gToken, "Content-Type":"application/json" },
+        body: JSON.stringify({
+          summary: task.text,
+          description: "由象限方塊建立",
+          start:{ dateTime: isoLocal(start), timeZone: tz },
+          end:  { dateTime: isoLocal(end),   timeZone: tz },
+          conferenceData:{ createRequest:{
+            requestId: "qb-" + task.id + "-" + Date.now(),
+            conferenceSolutionKey:{ type: "hangoutsMeet" }
+          }}
+        })
+      });
+    if(r.status === 401 || r.status === 403){
+      gToken = null; gRefreshUI();
+      msg.textContent = "授權過期或還沒有寫入權限，請重新連結日曆";
+      document.getElementById("meetGo").disabled = false; return;
+    }
+    if(!r.ok){
+      msg.textContent = "建立失敗（"+r.status+"）";
+      document.getElementById("meetGo").disabled = false; return;
+    }
+    const ev = await r.json();
+    task.meet = ev.hangoutLink || "";
+    task.evt  = ev.id || "";
+    save(); renderAll();
+    msg.textContent = ev.hangoutLink
+      ? "已建立，Meet 連結附在任務上了"
+      : "活動已建立（這個帳號無法自動產生 Meet 連結）";
+    setTimeout(closeMeet, 2400);
+  }catch(e){
+    msg.textContent = "建立失敗，請檢查網路或重新授權";
+    document.getElementById("meetGo").disabled = false;
+  }
+}
+
+document.getElementById("meetNo").onclick = closeMeet;
+document.getElementById("meetGo").onclick = createMeeting;
 
 /* ── 桌面外殼（有的話） ────────────────────────────────────
    window.orbShell 由 Electron 的 preload 注入；在瀏覽器裡不存在，
