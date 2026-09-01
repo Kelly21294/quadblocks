@@ -144,6 +144,63 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 
 .listhint{font-size:11.5px;color:var(--ink-3);text-align:center;margin:22px 0 -4px}
 
+/* 行事曆匯入 */
+.calrow{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:12px;
+  padding-top:12px;border-top:1px dashed var(--line)}
+.calbtn{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);cursor:pointer;
+  border-radius:9px;padding:8px 13px;font:500 13px/1 inherit;transition:border-color .15s,background .15s}
+.calbtn:hover{border-color:var(--accent);background:var(--surface)}
+.calbtn[aria-expanded="true"]{border-color:var(--accent);background:var(--accent-soft,var(--surface))}
+.calnote{font-size:11.5px;color:var(--ink-3)}
+.calpanel{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  padding:16px;margin-top:12px;box-shadow:var(--shadow)}
+.calpanel[hidden]{display:none}
+.gbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.gstatus{font-size:12px;color:var(--ink-3);flex:1;min-width:120px}
+.gstatus.ok{color:var(--q4)}
+.gstatus.bad{color:var(--q1)}
+.glink{background:none;border:none;color:var(--ink-3);cursor:pointer;font:400 12px/1 inherit;
+  text-decoration:underline;text-underline-offset:3px;padding:4px}
+.glink:hover{color:var(--ink-2)}
+.gsetup{margin-top:12px;padding:13px;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:10px}
+.gsetup[hidden]{display:none}
+.glabel{display:block;font:500 11.5px/1 inherit;color:var(--ink-2);margin-bottom:7px}
+.gsetup input{width:100%;background:var(--surface);color:var(--ink);border:1px solid var(--line);
+  border-radius:8px;padding:9px 11px;font:400 12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.gsetup input:focus{outline:none;border-color:var(--accent)}
+.ghint{font-size:11.5px;color:var(--ink-3);line-height:1.7;margin:9px 0 0}
+.gsetrow{display:flex;gap:8px;margin-top:11px}
+.calor{display:flex;align-items:center;gap:11px;margin:16px 0 12px;
+  font-size:11.5px;color:var(--ink-3)}
+.calor::before,.calor::after{content:"";flex:1;height:1px;background:var(--line)}
+.calpanel textarea{width:100%;resize:vertical;background:var(--surface-2);color:var(--ink);
+  border:1px solid var(--line);border-radius:9px;padding:10px 12px;
+  font:400 13.5px/1.7 inherit}
+.calpanel textarea:focus{outline:none;border-color:var(--accent)}
+.calactions{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  flex-wrap:wrap;margin-top:11px}
+.calpick{font-size:12.5px;color:var(--ink-3);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.calpick .mini{display:inline-flex;align-items:center;gap:5px;cursor:pointer;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  border-radius:99px;padding:5px 10px;font:500 12px/1 inherit}
+.calpick .mini[aria-pressed="true"]{border-color:var(--qc);color:var(--ink)}
+.calpick .mini i{width:8px;height:8px;border-radius:2px;background:var(--qc);display:block}
+.evlist{margin-top:13px;display:flex;flex-direction:column;gap:1px;background:var(--line-soft,var(--line));
+  border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.ev{background:var(--surface-2);display:flex;align-items:center;gap:11px;padding:10px 13px;font-size:14px}
+.ev input{width:17px;height:17px;accent-color:var(--accent);flex:none;cursor:pointer}
+.ev .tm{font:500 11.5px/1 "IBM Plex Mono",ui-monospace,monospace;color:var(--ink-3);flex:none;min-width:38px}
+.ev .nm{flex:1;word-break:break-word}
+.ev.dup{opacity:.5}
+.ev .dupmark{font-size:11px;color:var(--ink-3);flex:none}
+.calfoot{display:flex;justify-content:space-between;align-items:center;gap:11px;
+  margin-top:11px;flex-wrap:wrap}
+.calmsg{font-size:12px;color:var(--ink-3)}
+.task .tag{font:500 10px/1 "IBM Plex Mono",ui-monospace,monospace;color:var(--ink-3);
+  border:1px solid var(--line);border-radius:4px;padding:3px 5px;margin-left:8px;
+  vertical-align:middle;white-space:nowrap}
+
 /* 換日提示 */
 .daybar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
   background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--q2);
@@ -224,6 +281,45 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
       <button class="go" id="addBtn">加入</button>
     </div>
     <div class="chips" id="chips"></div>
+    <div class="calrow">
+      <button class="calbtn" id="calBtn">📅 從行事曆匯入</button>
+      <span class="calnote">把當天標成工作顏色的行程，一次帶進來</span>
+    </div>
+  </section>
+
+  <section class="calpanel" id="calPanel" hidden>
+
+    <div class="gbar">
+      <button class="go" id="gConnect">連結 Google 日曆</button>
+      <button class="calbtn" id="gFetchBtn" hidden>重抓今天的行程</button>
+      <span class="gstatus" id="gStatus">尚未設定</span>
+      <button class="glink" id="gSetupBtn" title="設定 Google 用戶端 ID">設定</button>
+    </div>
+
+    <div class="gsetup" id="gSetup" hidden>
+      <label class="glabel" for="gId">Google OAuth 用戶端 ID</label>
+      <input id="gId" type="text" spellcheck="false" autocomplete="off"
+             placeholder="1234567890-xxxxxxxx.apps.googleusercontent.com">
+      <p class="ghint">
+        在 Google Cloud Console 建立「網頁應用程式」用戶端後取得，貼進來按儲存即可。
+        它不是密碼，公開也沒關係——真正的防護是授權來源限制。<br>
+        只存在這台裝置的瀏覽器裡，不會進到程式碼或 GitHub。
+      </p>
+      <div class="gsetrow">
+        <button class="go" id="gSave">儲存</button>
+        <button class="calbtn" id="gForget">清除</button>
+      </div>
+    </div>
+
+    <div class="calor"><span>或手動貼上</span></div>
+
+    <textarea id="calText" rows="3" spellcheck="false"
+      placeholder="一行一件，例如：&#10;19:00 知識策展力講座&#10;（沒有時間也可以，直接寫標題）"></textarea>
+    <div class="calactions">
+      <span class="calpick">放進：<span id="calChips"></span></span>
+      <button class="calbtn" id="calRead">讀取貼上的行程</button>
+    </div>
+    <div id="calResult"></div>
   </section>
 
   <p class="listhint">打勾＝完成 · 點任務名稱可以換到其他象限</p>
@@ -252,6 +348,7 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
   </footer>
 </main>
 
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 // ── 四象限定義（顏色＝你指定的紅藍黃綠；位置＝標準艾森豪矩陣）──
 const QUADS = {
@@ -276,6 +373,8 @@ function load(){
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 // 每象限完成度 → 幾格（0..4）：有進度至少 1 格，全做完才滿 4 格
 function filledOf(q){
@@ -440,7 +539,13 @@ function renderLists(){
         const del=document.createElement("button"); del.className="del"; del.innerHTML="&times;";
         del.setAttribute("aria-label","刪除："+task.text);
         del.onclick=()=>{ state.tasks=state.tasks.filter(x=>x.id!==task.id); moveId=null; save(); renderAll(); };
-        row.append(cb,txt,mv,del); g.appendChild(row);
+        row.append(cb,txt);
+        if(task.src==="cal"){
+          const tg=document.createElement("span"); tg.className="tag";
+          tg.textContent="日曆"; tg.title="這件事是從行事曆匯入的";
+          row.append(tg);
+        }
+        row.append(mv,del); g.appendChild(row);
 
         if(moveId===task.id){
           const bar=document.createElement("div"); bar.className="mvbar";
@@ -553,8 +658,203 @@ ioAct.onclick=()=>{
   }catch(e){ say("這段文字讀不出來，請確認是完整複製的"); }
 };
 
+/* ────────────────────────────────────────────────────────────
+   行事曆匯入
+   刻意切成三段：① 取得行程 ② 轉成任務 ③ 匯入盤面。
+   現在①是「貼上文字」，之後接 Google 日曆時只換①，②③完全不動。
+   ──────────────────────────────────────────────────────────── */
+let calQ = 3;              // 預設放進「委派 / 批次」（黃）
+let calEvents = [];        // ② 轉換後、還沒匯入的行程
+
+// ① 取得行程（預覽版：從貼上的文字讀）
+function parseCalText(text){
+  return String(text||"").split(/\r?\n/).map(l=>l.trim())
+    .filter(l => l && !l.startsWith("#"))
+    .map(line=>{
+      const m = line.match(/^(\d{1,2}[:：]\d{2})\s+(.*)$/);
+      const time  = m ? m[1].replace("：",":") : "";
+      const title = (m ? m[2] : line).trim().slice(0,120);
+      return title ? {time, title} : null;
+    })
+    .filter(Boolean);
+}
+
+// ① 取得行程（正式版：Google 日曆）
+// 只有這一段在跟 Google 說話。它最後一樣是產生 calEvents，②③完全不知道資料哪裡來的。
+const GKEY = "quadblocks.gcal";
+const GSCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+let gToken = null, gClient = null;
+
+const gCfg  = () => { try{ return JSON.parse(localStorage.getItem(GKEY))||{}; }catch(e){ return {}; } };
+const gSave = o  => { try{ localStorage.setItem(GKEY, JSON.stringify(o)); }catch(e){} };
+const gLibReady = () => !!(window.google && google.accounts && google.accounts.oauth2);
+
+function gStatus(text, kind){
+  const el=document.getElementById("gStatus");
+  el.textContent=text;
+  el.className="gstatus"+(kind?" "+kind:"");
+}
+function gRefreshUI(){
+  const id=(gCfg().clientId||"").trim();
+  document.getElementById("gFetchBtn").hidden = !gToken;
+  document.getElementById("gConnect").textContent = gToken ? "重新授權" : "連結 Google 日曆";
+  if(!id) gStatus("還沒設定用戶端 ID，先按右邊「設定」");
+  else if(!gToken) gStatus("已設定，按左邊連結你的日曆");
+}
+
+function gConnect(){
+  const id=(gCfg().clientId||"").trim();
+  if(!id){ document.getElementById("gSetup").hidden=false;
+           document.getElementById("gId").focus();
+           gStatus("請先填入用戶端 ID","bad"); return; }
+  if(location.protocol==="file:"){
+    gStatus("用檔案直接開啟時 Google 不接受授權，請改用網址開啟","bad"); return; }
+  if(!gLibReady()){
+    gStatus("Google 登入元件沒載入（可能被擋或離線），重新整理再試","bad"); return; }
+  try{
+    if(!gClient){
+      gClient = google.accounts.oauth2.initTokenClient({
+        client_id:id, scope:GSCOPE,
+        callback: resp => {
+          if(resp && resp.access_token){ gToken=resp.access_token; gRefreshUI(); gFetch(); }
+          else gStatus("授權沒有完成","bad");
+        },
+        error_callback: () => gStatus("授權被取消或失敗","bad")
+      });
+    }
+    gStatus("等待你在 Google 視窗中授權…");
+    gClient.requestAccessToken();
+  }catch(e){ gStatus("無法開始授權，請確認用戶端 ID 正確","bad"); }
+}
+
+async function gFetch(){
+  if(!gToken){ gConnect(); return; }
+  gStatus("讀取今天的行程中…");
+  const now=new Date();
+  const from=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const to=new Date(from.getTime()+86400000);
+  const url="https://www.googleapis.com/calendar/v3/calendars/primary/events"+
+    "?singleEvents=true&orderBy=startTime&maxResults=50"+
+    "&timeMin="+encodeURIComponent(from.toISOString())+
+    "&timeMax="+encodeURIComponent(to.toISOString());
+  try{
+    const r=await fetch(url,{headers:{Authorization:"Bearer "+gToken}});
+    if(r.status===401||r.status===403){
+      gToken=null; gRefreshUI(); gStatus("授權過期或被拒絕，請重新連結","bad"); return; }
+    if(!r.ok){ gStatus("讀取失敗（"+r.status+"）","bad"); return; }
+    const data=await r.json();
+    calEvents=(data.items||[])
+      .filter(ev => ev && ev.status!=="cancelled" && ev.summary)
+      .map(ev => ({
+        time: (ev.start && ev.start.dateTime)
+          ? new Date(ev.start.dateTime).toLocaleTimeString("zh-TW",
+              {hour:"2-digit",minute:"2-digit",hour12:false})
+          : "",
+        title: String(ev.summary).trim().slice(0,120)
+      }));
+    renderCalResult(); gRefreshUI();
+    gStatus(calEvents.length ? "讀到今天 "+calEvents.length+" 件行程，勾要的再加入" : "今天沒有行程","ok");
+  }catch(e){ gStatus("讀取失敗，請檢查網路或重新授權","bad"); }
+}
+
+// ② 一件行程 → 一個任務的識別鍵（同一天同名只會進來一次）
+const calKey = title => todayStr()+"|"+title;
+
+function renderCalChips(){
+  const box=document.getElementById("calChips"); box.innerHTML="";
+  for(const q of ORDER){
+    const b=document.createElement("button");
+    b.className="mini"; b.type="button";
+    b.style.setProperty("--qc",QUADS[q].color);
+    b.setAttribute("aria-pressed", q===calQ);
+    b.innerHTML=`<i></i>${QUADS[q].name}`;
+    b.onclick=()=>{ calQ=q; renderCalChips(); };
+    box.appendChild(b);
+  }
+}
+
+function renderCalResult(){
+  const box=document.getElementById("calResult");
+  if(!calEvents.length){ box.innerHTML=""; return; }
+  const rows = calEvents.map((e,i)=>{
+    const dup = state.tasks.some(t=>t.ck===calKey(e.title));
+    return '<label class="ev'+(dup?" dup":"")+'">'+
+      '<input type="checkbox" data-ev="'+i+'"'+(dup?"":" checked")+(dup?" disabled":"")+'>'+
+      '<span class="tm">'+esc(e.time||"—")+'</span>'+
+      '<span class="nm">'+esc(e.title)+'</span>'+
+      (dup?'<span class="dupmark">已經在盤面上</span>':'')+
+    '</label>';
+  }).join("");
+  const fresh = calEvents.filter(e=>!state.tasks.some(t=>t.ck===calKey(e.title))).length;
+  box.innerHTML='<div class="evlist">'+rows+'</div>'+
+    '<div class="calfoot"><span class="calmsg" id="calMsg">讀到 '+calEvents.length+' 件'+
+      (fresh<calEvents.length ? '，其中 '+(calEvents.length-fresh)+' 件已經加過' : '')+'</span>'+
+    '<button class="go" id="calAdd"'+(fresh?"":" disabled")+'>加入盤面</button></div>';
+
+  const addBtn=document.getElementById("calAdd");
+  if(addBtn) addBtn.onclick=importChecked;
+}
+
+// ③ 匯入盤面
+function importChecked(){
+  const picked=[...document.querySelectorAll("#calResult input[data-ev]")]
+    .filter(c=>c.checked && !c.disabled)
+    .map(c=>calEvents[+c.dataset.ev]);
+  let n=0;
+  for(const e of picked){
+    const ck=calKey(e.title);
+    if(state.tasks.some(t=>t.ck===ck)) continue;
+    state.tasks.push({ id:uid(), text:e.title, q:calQ, done:false, src:"cal", ck });
+    n++;
+  }
+  if(!n) return;
+  save(); renderAll(); renderCalResult();
+  const m=document.getElementById("calMsg");
+  if(m) m.textContent="已加入 "+n+" 件到「"+QUADS[calQ].name+"」";
+}
+
+const calBtn=document.getElementById("calBtn"), calPanel=document.getElementById("calPanel");
+calBtn.setAttribute("aria-expanded","false");
+calBtn.onclick=()=>{
+  const open=calPanel.hidden;
+  calPanel.hidden=!open;
+  calBtn.setAttribute("aria-expanded", open);
+  if(open) document.getElementById("calText").focus();
+};
+document.getElementById("gConnect").onclick=gConnect;
+document.getElementById("gFetchBtn").onclick=gFetch;
+document.getElementById("gSetupBtn").onclick=()=>{
+  const s=document.getElementById("gSetup");
+  s.hidden=!s.hidden;
+  if(!s.hidden){ document.getElementById("gId").value=gCfg().clientId||"";
+                 document.getElementById("gId").focus(); }
+};
+document.getElementById("gSave").onclick=()=>{
+  const v=document.getElementById("gId").value.trim();
+  if(v && !/\.apps\.googleusercontent\.com$/.test(v)){
+    gStatus("這串看起來不像用戶端 ID（結尾應是 .apps.googleusercontent.com）","bad"); return; }
+  gSave({clientId:v}); gClient=null;
+  document.getElementById("gSetup").hidden=true;
+  gRefreshUI();
+  if(v) gStatus("已儲存，按「連結 Google 日曆」","ok");
+};
+document.getElementById("gForget").onclick=()=>{
+  gSave({}); gToken=null; gClient=null;
+  document.getElementById("gId").value="";
+  gRefreshUI();
+};
+
+document.getElementById("calRead").onclick=()=>{
+  calEvents=parseCalText(document.getElementById("calText").value);
+  renderCalResult();
+  if(!calEvents.length){
+    document.getElementById("calResult").innerHTML=
+      '<div class="calfoot"><span class="calmsg">沒有讀到行程，一行一件試試看</span></div>';
+  }
+};
+
 rollDay();
-renderChips(); renderAll();
+renderChips(); renderCalChips(); gRefreshUI(); renderAll();
 </script>
 </body>
 </html>
