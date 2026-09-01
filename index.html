@@ -219,6 +219,51 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 .task.dragging{opacity:.35}
 .group.dropok{background:var(--surface-2);box-shadow:inset 0 0 0 2px var(--qc);border-radius:12px}
 .cell.dropok{outline:2px dashed var(--qc);outline-offset:-4px}
+/* ── 年度回顧 ─────────────────────────────────────────────
+   顏色刻意不用四象限那四色：那四個顏色在這個工具裡是「策略」的語彙，
+   年度格子講的是「量」，混用會讓人誤讀。所以用單一墨色的深淺。 */
+.yearbox{margin-top:30px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
+  box-shadow:var(--shadow);overflow:hidden}
+.yearbox summary{list-style:none;cursor:pointer;padding:13px 16px;font-size:13px;color:var(--ink-2);
+  display:flex;align-items:center;gap:8px;user-select:none}
+.yearbox summary::-webkit-details-marker{display:none}
+.yearbox summary::before{content:"▸";color:var(--ink-3);font-size:11px;transition:transform .18s}
+.yearbox[open] summary::before{transform:rotate(90deg)}
+.yearbox summary:hover{color:var(--ink);background:var(--surface-2)}
+.yearinner{padding:4px 16px 16px}
+.yearhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.yeartitle{font:600 15px/1 "IBM Plex Mono",ui-monospace,monospace;color:var(--ink)}
+.yearsub{font-size:11.5px;color:var(--ink-3)}
+.yearscroll{overflow-x:auto;padding-bottom:4px}
+.yearmonths{display:grid;grid-auto-flow:column;grid-auto-columns:11px;gap:3px;
+  font:500 9.5px/1 "IBM Plex Mono",ui-monospace,monospace;color:var(--ink-3);
+  height:13px;min-width:max-content}
+.yearmonths span{white-space:nowrap}
+.yeargrid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);
+  grid-auto-columns:11px;gap:3px;min-width:max-content}
+.yeargrid i{display:block;border-radius:2.5px;background:var(--cell-empty);
+  box-shadow:inset 0 0 0 1px var(--cell-edge)}
+.yeargrid i[data-l="0"]{background:var(--cell-empty)}
+.yeargrid i[data-l="1"]{background:color-mix(in srgb,var(--ink) 16%,var(--cell-empty))}
+.yeargrid i[data-l="2"]{background:color-mix(in srgb,var(--ink) 38%,var(--cell-empty))}
+.yeargrid i[data-l="3"]{background:color-mix(in srgb,var(--ink) 64%,var(--cell-empty))}
+.yeargrid i[data-l="4"]{background:var(--ink)}
+.yeargrid i.void{background:none;box-shadow:none}
+.yeargrid i.today{box-shadow:inset 0 0 0 1px var(--cell-edge),0 0 0 1.5px var(--accent)}
+.yearfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  margin-top:13px;flex-wrap:wrap}
+.yearstats{font-size:12px;color:var(--ink-2);display:flex;gap:14px;flex-wrap:wrap}
+.yearstats b{color:var(--ink);font:600 13px/1 "IBM Plex Mono",ui-monospace,monospace}
+.yearlegend{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ink-3)}
+.yearlegend i{width:11px;height:11px;border-radius:2.5px;display:block;
+  box-shadow:inset 0 0 0 1px var(--cell-edge)}
+.yearlegend i[data-l="0"]{background:var(--cell-empty)}
+.yearlegend i[data-l="1"]{background:color-mix(in srgb,var(--ink) 16%,var(--cell-empty))}
+.yearlegend i[data-l="2"]{background:color-mix(in srgb,var(--ink) 38%,var(--cell-empty))}
+.yearlegend i[data-l="3"]{background:color-mix(in srgb,var(--ink) 64%,var(--cell-empty))}
+.yearlegend i[data-l="4"]{background:var(--ink)}
+.yearempty{font-size:12.5px;color:var(--ink-3);line-height:1.8;padding:6px 0}
+
 .tools{display:flex;justify-content:center;gap:8px;margin-top:26px}
 .tools button{border:1px solid var(--line);background:var(--surface);color:var(--ink-3);
   border-radius:8px;padding:7px 13px;font:400 12.5px/1 inherit;cursor:pointer}
@@ -325,6 +370,28 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
   <p class="listhint">打勾＝完成 · 點任務名稱可以換到其他象限</p>
   <section id="lists"></section>
 
+  <details class="yearbox" id="yearBox">
+    <summary>展開年度回顧</summary>
+    <div class="yearinner">
+      <div class="yearhead">
+        <span class="yeartitle" id="yearTitle">2026</span>
+        <span class="yearsub">每一格是一天，顏色深淺代表當天的完成度</span>
+      </div>
+      <div class="yearscroll">
+        <div class="yearmonths" id="yearMonths"></div>
+        <div class="yeargrid" id="yearGrid"></div>
+      </div>
+      <div class="yearfoot">
+        <div class="yearstats" id="yearStats"></div>
+        <div class="yearlegend">
+          <span>少</span>
+          <i data-l="0"></i><i data-l="1"></i><i data-l="2"></i><i data-l="3"></i><i data-l="4"></i>
+          <span>多</span>
+        </div>
+      </div>
+    </div>
+  </details>
+
   <div class="tools">
     <button id="expBtn">匯出</button>
     <button id="impBtn">匯入</button>
@@ -418,16 +485,32 @@ function dropOn(ev, q){
 document.addEventListener("dragend", clearHint);
 
 // ── 換日：隔天自己開新的一天，做完的收起來、沒做完的留著 ──
-function todayStr(){
-  const d=new Date();
-  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const dstr = d =>
+  d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+function todayStr(){ return dstr(new Date()); }
+// 換日前先把當天的結果存成一筆歷史。歷史沒辦法事後補，所以多存一點：
+// 畫面現在只用到完成數，但四個象限的分佈一起留著，之後想看「力氣花在哪」才有料。
+function archiveDay(){
+  const total = state.tasks.length;
+  if(!total || !state.day) return;
+  const done = state.tasks.filter(x=>x.done).length;
+  const q = ORDER.map(qq=>{
+    const t = state.tasks.filter(x=>x.q===qq);
+    return [t.length, t.filter(x=>x.done).length];
+  });
+  state.history = (state.history || []).filter(h => h && h.d !== state.day);
+  state.history.push({ d: state.day, t: total, c: done, q });
+  state.history.sort((a,b)=> a.d < b.d ? -1 : 1);
+  if(state.history.length > 800) state.history = state.history.slice(-800);
 }
+
 function rollDay(){
   const today = todayStr();
   if(!state.day){ state.day = today; save(); return; }
   if(state.day === today) return;
   const done = state.tasks.filter(x=>x.done).length;
   const left = state.tasks.filter(x=>!x.done).length;
+  archiveDay();
   state.tasks = state.tasks.filter(x=>!x.done);
   state.day = today; moveId=null; lastOn=new Set(); save();
   if(done || left) showDayBar(done, left); else hideDayBar();
@@ -570,7 +653,75 @@ function renderLists(){
   }
 }
 
-function renderAll(){ renderBoard(); renderSummary(); renderLists(); }
+/* ── 年度回顧 ──────────────────────────────────────────────
+   一格一天，深淺＝當天完成度。有紀錄但一件都沒完成也會上一層淡色，
+   這樣「那天有排事情但沒推進」跟「那天根本沒開工具」看得出差別。 */
+const MONTHS = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+function dayLevel(c,t){
+  if(!t) return 0;
+  if(c===0) return 1;
+  const r=c/t;
+  return r<0.5 ? 2 : (r<1 ? 3 : 4);
+}
+function yearMap(){
+  const map={};
+  (state.history||[]).forEach(h=>{ if(h&&h.d) map[h.d]={c:h.c||0,t:h.t||0}; });
+  if(state.tasks.length)                                   // 今天還沒歸檔，用現在的盤面
+    map[todayStr()]={c:state.tasks.filter(x=>x.done).length, t:state.tasks.length};
+  return map;
+}
+function renderYear(){
+  const grid=document.getElementById("yearGrid"), months=document.getElementById("yearMonths");
+  const year=new Date().getFullYear(), today=todayStr(), map=yearMap();
+  document.getElementById("yearTitle").textContent=year;
+
+  const jan1=new Date(year,0,1);
+  const start=new Date(year,0,1-jan1.getDay());            // 往前補到那一週的週日
+  const dec31=new Date(year,11,31);
+  const days=Math.round((dec31-start)/86400000)+1;
+  const cells=Math.ceil(days/7)*7;
+
+  grid.innerHTML=""; months.innerHTML="";
+  const labels=new Array(cells/7).fill("");
+  let lastM=-1;
+  for(let i=0;i<cells;i++){
+    const d=new Date(year,0,1-jan1.getDay()+i);
+    const el=document.createElement("i");
+    if(d.getFullYear()!==year){ el.className="void"; }
+    else{
+      const key=dstr(d), rec=map[key];
+      el.dataset.l=rec?dayLevel(rec.c,rec.t):0;
+      el.title=key+(rec?"　完成 "+rec.c+" / "+rec.t:"　沒有紀錄");
+      if(key===today) el.classList.add("today");
+      if(d.getDate()<=7 && d.getMonth()!==lastM){ labels[Math.floor(i/7)]=MONTHS[d.getMonth()]; lastM=d.getMonth(); }
+    }
+    grid.appendChild(el);
+  }
+  labels.forEach(t=>{ const s=document.createElement("span"); s.textContent=t; months.appendChild(s); });
+
+  // 統計
+  const rows=Object.entries(map).filter(([k])=>k.slice(0,4)===String(year))
+                                .sort((a,b)=>a[0]<b[0]?-1:1);
+  const doneSum=rows.reduce((a,[,v])=>a+v.c,0);
+  const clear=rows.filter(([,v])=>v.t>0&&v.c===v.t).length;
+  let best=0,run=0,prev=null;
+  for(const [k,v] of rows){
+    const cont = prev && (Math.round((new Date(k)-new Date(prev))/86400000)===1);
+    run = (v.c>0) ? (cont?run+1:1) : 0;
+    if(run>best) best=run;
+    prev=k;
+  }
+  document.getElementById("yearStats").innerHTML = rows.length
+    ? "記錄 <b>"+rows.length+"</b> 天 · 完成 <b>"+doneSum+"</b> 件 · 全清 <b>"+clear+
+      "</b> 天 · 最長連續 <b>"+best+"</b> 天"
+    : '<span class="yearempty">還沒有累積紀錄。從今天起，每次跨日都會自動存下當天的結果。</span>';
+}
+
+function renderAll(){
+  renderBoard(); renderSummary(); renderLists();
+  const yb=document.getElementById("yearBox");
+  if(yb && yb.open) renderYear();
+}
 
 function addTask(){
   const inp=document.getElementById("taskInput");
@@ -589,8 +740,13 @@ rb.onclick=()=>{
   if(!armed){ armed=true; rb.classList.add("confirm"); rb.textContent="確定清空？";
     armT=setTimeout(()=>{ armed=false; rb.classList.remove("confirm"); rb.textContent="新的一天"; },3000); return; }
   clearTimeout(armT); armed=false; rb.classList.remove("confirm"); rb.textContent="新的一天";
+  archiveDay();                      // 手動收工也算一天，一樣留下紀錄
   state.tasks=[]; state.day=todayStr(); moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
 };
+
+document.getElementById("yearBox").addEventListener("toggle", function(){
+  if(this.open) renderYear();
+});
 
 // 換日提示條上的兩顆鈕
 document.getElementById("dayOk").onclick = hideDayBar;
@@ -653,7 +809,12 @@ ioAct.onclick=()=>{
       .filter(x=>x&&typeof x.text==="string"&&QUADS[x.q])
       .map(x=>({id:x.id||uid(), text:String(x.text).slice(0,120), q:x.q, done:!!x.done}));
     if(!clean.length) throw 0;
-    state={tasks:clean, day:todayStr()}; moveId=null; lastOn=new Set(); save(); renderAll();
+    // 歷史紀錄補不回來，所以匯入時：檔案裡有就用檔案的，沒有就保留現有的，絕不清空
+    const hist = Array.isArray(d.history)
+      ? d.history.filter(h => h && typeof h.d === "string")
+      : (state.history || []);
+    state={tasks:clean, day:todayStr(), history:hist};
+    moveId=null; lastOn=new Set(); save(); renderAll();
     closeIO(); hideDayBar(); say("已匯入 "+clean.length+" 件");
   }catch(e){ say("這段文字讀不出來，請確認是完整複製的"); }
 };
