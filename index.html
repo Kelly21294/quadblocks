@@ -282,6 +282,19 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
    年度格子講的是「量」，混用會讓人誤讀。所以用單一墨色的深淺。 */
 /* ── 桌面浮窗：收合模式只留盤面 ─────────────────────────────
    同一份程式碼，網頁跟桌面共用；桌面外殼只負責視窗大小和永遠置頂。 */
+/* 復原提示：只有「刪掉東西」這種不可逆的動作才出聲 */
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:80;
+  display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);
+  background:var(--ink);color:var(--bg);border-radius:11px;padding:11px 14px;
+  font-size:13.5px;box-shadow:0 4px 12px rgba(20,24,33,.28),0 16px 36px -12px rgba(20,24,33,.5);
+  animation:toastin .18s ease}
+.toast[hidden]{display:none}
+@keyframes toastin{from{opacity:0;transform:translateX(-50%) translateY(8px)}}
+.toast span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast button{border:none;background:none;color:var(--bg);cursor:pointer;flex:none;
+  font:700 13.5px/1 inherit;text-decoration:underline;text-underline-offset:3px;padding:2px 0}
+.toast button:hover{opacity:.8}
+
 .orbctl{position:fixed;top:7px;right:8px;display:flex;gap:5px;z-index:60}
 .orbctl[hidden]{display:none}
 .orbctl button{width:23px;height:23px;padding:0;line-height:1;font-size:11px;cursor:pointer;
@@ -516,6 +529,11 @@ footer{color:var(--ink-3);font-size:11.5px;text-align:center;margin-top:34px;lin
     </div>
   </details>
 
+  <div class="toast" id="toast" hidden>
+    <span id="toastMsg"></span>
+    <button id="toastUndo">復原</button>
+  </div>
+
   <div class="orbctl" id="orbCtl" hidden>
     <button id="orbToggle" title="展開／收合">⤢</button>
     <button id="orbQuit" title="關閉視窗">✕</button>
@@ -604,10 +622,50 @@ function rankInQuad(r,c){         // 該格在象限內的填入順序：先下�
   return bottom ? lc : 2+lc;      // 下排 0/1，上排 2/3
 }
 
+/* ── 復原 ─────────────────────────────────────────────────
+   每次改動前先拍一張快照。刪除這種不可逆的動作會跳出提示條讓你按，
+   其他動作安靜地留在堆疊裡，Cmd/Ctrl+Z 一樣救得回來。
+   快照只留在記憶體：關掉分頁就沒了，這是刻意的——復原是「剛剛手滑」
+   的補救，不是版本控制。 */
+const UNDO_MAX = 25;
+let undoStack = [];
+let toastT = null;
+
+function snapshot(){
+  undoStack.push({
+    tasks: JSON.parse(JSON.stringify(state.tasks)),
+    history: JSON.parse(JSON.stringify(state.history || []))
+  });
+  if(undoStack.length > UNDO_MAX) undoStack.shift();
+}
+
+function undo(){
+  const snap = undoStack.pop();
+  if(!snap) return false;
+  state.tasks = snap.tasks;
+  state.history = snap.history;
+  moveId = null; lastOn = new Set();
+  save(); renderAll(); hideToast();
+  return true;
+}
+
+function showToast(text){
+  const t = document.getElementById("toast");
+  document.getElementById("toastMsg").textContent = text;
+  t.hidden = false;
+  clearTimeout(toastT);
+  toastT = setTimeout(hideToast, 8000);
+}
+function hideToast(){
+  clearTimeout(toastT);
+  document.getElementById("toast").hidden = true;
+}
+
 // ── 換象限：點選單或拖曳，最後都走這一個函式 ──
 function moveTask(id, q){
   const t = state.tasks.find(x=>x.id===id);
   if(!t || t.q===q) return false;
+  snapshot();
   t.q = q; moveId = null; save(); renderAll();
   return true;
 }
@@ -751,7 +809,7 @@ function renderLists(){
         const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=task.done;
         cb.style.setProperty("--qc",QUADS[q].color);
         cb.setAttribute("aria-label", (task.done?"取消完成：":"標記完成：")+task.text);
-        cb.onchange=()=>{ task.done=cb.checked; save(); renderAll(); };
+        cb.onchange=()=>{ snapshot(); task.done=cb.checked; save(); renderAll(); };
         // 換象限：點任務文字（或右邊小色塊）→ 展開四選一
         const toggle=()=>{ moveId = (moveId===task.id ? null : task.id); renderLists(); };
 
@@ -769,7 +827,12 @@ function renderLists(){
 
         const del=document.createElement("button"); del.className="del"; del.innerHTML="&times;";
         del.setAttribute("aria-label","刪除："+task.text);
-        del.onclick=()=>{ state.tasks=state.tasks.filter(x=>x.id!==task.id); moveId=null; save(); renderAll(); };
+        del.onclick=()=>{
+          snapshot();
+          state.tasks=state.tasks.filter(x=>x.id!==task.id);
+          moveId=null; save(); renderAll();
+          showToast("已刪除「"+task.text+"」");
+        };
         row.append(cb,txt);
         if(task.src==="cal"){
           const tg=document.createElement("span"); tg.className="tag";
@@ -927,6 +990,7 @@ function renderAll(){
 function addTask(){
   const inp=document.getElementById("taskInput");
   const text=inp.value.trim(); if(!text) return;
+  snapshot();
   const task = { id:uid(), text, q:pickQ, done:false, d:selDay };
   state.tasks.push(task);
   inp.value=""; save(); renderAll(); inp.focus();
@@ -943,10 +1007,26 @@ rb.onclick=()=>{
   if(!armed){ armed=true; rb.classList.add("confirm"); rb.textContent="確定清空？";
     armT=setTimeout(()=>{ armed=false; rb.classList.remove("confirm"); renderWeek(); },3000); return; }
   clearTimeout(armT); armed=false; rb.classList.remove("confirm");
+  const cleared = dayTasks().length;
+  snapshot();
   archiveDate(selDay, dayTasks());   // 手動收工也算一天，一樣留下紀錄
   state.tasks=state.tasks.filter(t=>t.d!==selDay);
   moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
+  if(cleared) showToast("已清空 "+cleared+" 件");
 };
+
+document.getElementById("toastUndo").onclick=()=>{
+  if(!undo()) showToast("沒有可以復原的動作了");
+};
+document.addEventListener("keydown", e=>{
+  const k = e.key === "z" || e.key === "Z";
+  if(!k || !(e.metaKey || e.ctrlKey) || e.shiftKey) return;
+  const el = document.activeElement;
+  const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+  if(typing) return;                       // 打字時讓瀏覽器自己的復原生效
+  e.preventDefault();
+  if(!undo()) showToast("沒有可以復原的動作了");
+});
 
 document.getElementById("wPrev").onclick=()=>shiftWeek(-1);
 document.getElementById("wNext").onclick=()=>shiftWeek(1);
@@ -960,8 +1040,11 @@ document.getElementById("yearBox").addEventListener("toggle", function(){
 document.getElementById("dayOk").onclick = hideDayBar;
 document.getElementById("dayClear").onclick = ()=>{
   const today=todayStr();
+  const n = state.tasks.filter(t=>t.d===today).length;
+  snapshot();
   state.tasks=state.tasks.filter(t=>t.d!==today);
   moveId=null; lastOn=new Set(); save(); renderAll(); hideDayBar();
+  if(n) showToast("已清空 "+n+" 件");
 };
 // 頁面放著過夜、或從別的分頁切回來時，也檢查一次日期
 document.addEventListener("visibilitychange", ()=>{
@@ -1024,9 +1107,12 @@ ioAct.onclick=()=>{
     const hist = Array.isArray(d.history)
       ? d.history.filter(h => h && typeof h.d === "string")
       : (state.history || []);
+    const before = state.tasks.length;
+    snapshot();
     state={tasks:clean, lastSeen:todayStr(), history:hist};
     moveId=null; lastOn=new Set(); save(); renderAll();
     closeIO(); hideDayBar(); say("已匯入 "+clean.length+" 件");
+    if(before) showToast("匯入覆蓋了原本的 "+before+" 件");
   }catch(e){ say("這段文字讀不出來，請確認是完整複製的"); }
 };
 
@@ -1247,6 +1333,7 @@ function importChecked(){
     .filter(c=>c.checked && !c.disabled)
     .map(c=>calEvents[+c.dataset.ev]);
   let n=0;
+  snapshot();
   for(const e of picked){
     const ck=calKey(e.title);
     if(state.tasks.some(t=>t.ck===ck)) continue;
