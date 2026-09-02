@@ -1055,7 +1055,8 @@ function parseCalText(text){
 // 只有這一段在跟 Google 說話。它最後一樣是產生 calEvents，②③完全不知道資料哪裡來的。
 const GKEY = "quadblocks.gcal";
 const GSCOPE = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events";
-let gToken = null, gClient = null;
+let gToken = null, gClient = null, gExp = 0, gRenewT = null;
+let gResolve = null;            // 等待這次要牌結果的人
 
 const gCfg  = () => { try{ return JSON.parse(localStorage.getItem(GKEY))||{}; }catch(e){ return {}; } };
 const gSave = o  => { try{ localStorage.setItem(GKEY, JSON.stringify(o)); }catch(e){} };
@@ -1067,13 +1068,80 @@ function gStatus(text, kind){
   el.className="gstatus"+(kind?" "+kind:"");
 }
 function gRefreshUI(){
-  const id=(gCfg().clientId||"").trim();
+  const c = gCfg(), id=(c.clientId||"").trim();
   document.getElementById("gFetchBtn").hidden = !gToken;
   document.getElementById("gConnect").textContent = gToken ? "重新授權" : "連結 Google 日曆";
   if(!id) gStatus("還沒設定用戶端 ID，先按右邊「設定」");
-  else if(!gToken) gStatus("已設定，按左邊連結你的日曆");
+  else if(gToken) gStatus("已連線，之後會自動保持連線","ok");
+  else if(c.authed) gStatus("已授權過，開頁時會自動連線");
+  else gStatus("已設定，按左邊連結你的日曆");
 }
 
+// 授權一小時就過期，這是 Google 的規定。但只要你同意過一次，之後就能
+// 靜默續約（prompt:""）——不彈視窗、不打斷你。所以「同意」只需要一次，
+// 「換新的通行證」由程式自己在背景做。
+function gInitClient(){
+  const id=(gCfg().clientId||"").trim();
+  if(!id || !gLibReady()) return null;
+  if(!gClient){
+    try{
+      gClient = google.accounts.oauth2.initTokenClient({
+        client_id:id, scope:GSCOPE,
+        callback: resp => {
+          if(resp && resp.access_token){
+            gToken = resp.access_token;
+            gExp = Date.now() + ((parseInt(resp.expires_in,10)||3600) * 1000);
+            const c = gCfg(); c.authed = true; gSave(c);   // 記得「同意過了」
+            scheduleRenew(); gRefreshUI();
+            const r = gResolve; gResolve = null; if(r) r(true);
+          }else{
+            const r = gResolve; gResolve = null; if(r) r(false);
+            gStatus("授權沒有完成","bad");
+          }
+        },
+        error_callback: () => {
+          const r = gResolve; gResolve = null; if(r) r(false);
+        }
+      });
+    }catch(e){ return null; }
+  }
+  return gClient;
+}
+
+function scheduleRenew(){
+  clearTimeout(gRenewT);
+  const ms = Math.max(60000, gExp - Date.now() - 5*60000);   // 到期前五分鐘先換
+  gRenewT = setTimeout(()=>{ if(gCfg().authed) gEnsureToken(); }, ms);
+}
+
+// 靜默要一張新通行證。拿不到就回 false，由呼叫的人決定要不要請使用者出手。
+function gEnsureToken(){
+  return new Promise(res => {
+    const c = gInitClient();
+    if(!c || location.protocol === "file:") return res(false);
+    let done = false;
+    const finish = v => { if(!done){ done = true; res(v); } };
+    gResolve = finish;
+    try{ c.requestAccessToken({ prompt: "" }); }catch(e){ return finish(false); }
+    setTimeout(()=>finish(false), 8000);
+  });
+}
+
+// 所有對 Google 的呼叫都走這裡：過期就自己續一次，續不到才回報
+async function gApi(url, opts, retried){
+  if(!gToken && gCfg().authed) await gEnsureToken();
+  if(!gToken) return { ok:false, status:0, noToken:true };
+  const o = Object.assign({}, opts||{});
+  o.headers = Object.assign({}, o.headers||{}, { Authorization:"Bearer "+gToken });
+  const r = await fetch(url, o);
+  if((r.status === 401 || r.status === 403) && !retried && gCfg().authed){
+    gToken = null;
+    if(await gEnsureToken()) return gApi(url, opts, true);
+  }
+  return r;
+}
+
+// 使用者主動按「連結」時才會彈視窗
 function gConnect(){
   const id=(gCfg().clientId||"").trim();
   if(!id){ document.getElementById("gSetup").hidden=false;
@@ -1081,26 +1149,32 @@ function gConnect(){
            gStatus("請先填入用戶端 ID","bad"); return; }
   if(location.protocol==="file:"){
     gStatus("用檔案直接開啟時 Google 不接受授權，請改用網址開啟","bad"); return; }
+  const c = gInitClient();
+  if(!c){ gStatus("Google 登入元件沒載入（可能被擋或離線），重新整理再試","bad"); return; }
+  gStatus("等待你在 Google 視窗中授權…");
+  gResolve = ok => { if(ok) gFetch(); };
+  try{ c.requestAccessToken(); }
+  catch(e){ gStatus("無法開始授權，請確認用戶端 ID 正確","bad"); }
+}
+
+// 開頁時：同意過就自己靜默接上，不吵你
+function gAutoConnect(tries){
+  const c = gCfg();
+  if(!(c.clientId||"").trim() || !c.authed) return;
+  if(location.protocol === "file:") return;
   if(!gLibReady()){
-    gStatus("Google 登入元件沒載入（可能被擋或離線），重新整理再試","bad"); return; }
-  try{
-    if(!gClient){
-      gClient = google.accounts.oauth2.initTokenClient({
-        client_id:id, scope:GSCOPE,
-        callback: resp => {
-          if(resp && resp.access_token){ gToken=resp.access_token; gRefreshUI(); gFetch(); }
-          else gStatus("授權沒有完成","bad");
-        },
-        error_callback: () => gStatus("授權被取消或失敗","bad")
-      });
-    }
-    gStatus("等待你在 Google 視窗中授權…");
-    gClient.requestAccessToken();
-  }catch(e){ gStatus("無法開始授權，請確認用戶端 ID 正確","bad"); }
+    if(tries > 0) setTimeout(()=>gAutoConnect(tries-1), 400);
+    return;
+  }
+  gStatus("自動連線中…");
+  gEnsureToken().then(ok => {
+    gRefreshUI();
+    if(!ok) gStatus("自動連線沒成功，按一下「連結 Google 日曆」","bad");
+  });
 }
 
 async function gFetch(){
-  if(!gToken){ gConnect(); return; }
+  if(!gToken && !gCfg().authed){ gConnect(); return; }
   gStatus("讀取行程中…");
   const from=parseDay(selDay);
   const to=new Date(from.getFullYear(),from.getMonth(),from.getDate()+1);
@@ -1109,9 +1183,10 @@ async function gFetch(){
     "&timeMin="+encodeURIComponent(from.toISOString())+
     "&timeMax="+encodeURIComponent(to.toISOString());
   try{
-    const r=await fetch(url,{headers:{Authorization:"Bearer "+gToken}});
+    const r=await gApi(url);
+    if(r.noToken){ gStatus("需要重新授權一次，按「連結 Google 日曆」","bad"); return; }
     if(r.status===401||r.status===403){
-      gToken=null; gRefreshUI(); gStatus("授權過期或被拒絕，請重新連結","bad"); return; }
+      gToken=null; gRefreshUI(); gStatus("授權被拒絕，請重新連結","bad"); return; }
     if(!r.ok){ gStatus("讀取失敗（"+r.status+"）","bad"); return; }
     const data=await r.json();
     calEvents=(data.items||[])
@@ -1210,7 +1285,7 @@ document.getElementById("gSave").onclick=()=>{
   if(v) gStatus("已儲存，按「連結 Google 日曆」","ok");
 };
 document.getElementById("gForget").onclick=()=>{
-  gSave({}); gToken=null; gClient=null;
+  gSave({}); gToken=null; gClient=null; gExp=0; clearTimeout(gRenewT);
   document.getElementById("gId").value="";
   gRefreshUI();
 };
@@ -1253,7 +1328,7 @@ async function createMeeting(){
   const task = state.tasks.find(t => t.id === meetTaskId);
   const msg = document.getElementById("meetMsg");
   if(!task) return closeMeet();
-  if(!gToken){
+  if(!gToken && !gCfg().authed){
     msg.textContent = "要先連結 Google 日曆（下面那個面板）";
     document.getElementById("calPanel").hidden = false;
     return;
@@ -1269,10 +1344,10 @@ async function createMeeting(){
   document.getElementById("meetGo").disabled = true;
   msg.textContent = "建立中…";
   try{
-    const r = await fetch(
+    const r = await gApi(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
       { method:"POST",
-        headers:{ Authorization:"Bearer "+gToken, "Content-Type":"application/json" },
+        headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           summary: task.text,
           description: "由象限方塊建立",
@@ -1284,9 +1359,14 @@ async function createMeeting(){
           }}
         })
       });
+    if(r.noToken){
+      msg.textContent = "要先連結 Google 日曆（下面那個面板）";
+      document.getElementById("calPanel").hidden = false;
+      document.getElementById("meetGo").disabled = false; return;
+    }
     if(r.status === 401 || r.status === 403){
       gToken = null; gRefreshUI();
-      msg.textContent = "授權過期或還沒有寫入權限，請重新連結日曆";
+      msg.textContent = "還沒有寫入權限，請按「連結 Google 日曆」重新授權一次";
       document.getElementById("meetGo").disabled = false; return;
     }
     if(!r.ok){
@@ -1338,7 +1418,7 @@ applyMode();
 
 selDay = todayStr();
 rollDays();
-renderChips(); renderCalChips(); gRefreshUI(); renderAll();
+renderChips(); renderCalChips(); gRefreshUI(); renderAll(); gAutoConnect(15);
 </script>
 </body>
 </html>
